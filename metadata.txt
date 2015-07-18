@@ -1,0 +1,38 @@
+# This file contains metadata for your plugin. Beginning
+# with version 1.8 this is the preferred way to supply information about a
+# plugin. The current method of embedding metadata in __init__.py will
+# be supported until version 2.0
+
+# This file should be included when you package your plugin.
+
+# Mandatory items:
+
+
+[general]
+name=CLUZ (Conservation Land-use Zoning)
+qgisMinimumVersion=2.0
+description=CLUZ for QGIS
+about=This plugin lets people design protected area networks and other conservation landscapes and seascapes through on-screen conservation planning. It also acts as an interface for the Marxan software package.
+version=2015.07.12
+author=Bob Smith
+email=r.j.smith@kent.ac.uk
+
+# end of mandatory metadata
+
+# Optional items:
+
+# Uncomment the following line and add your changelog entries:
+# changelog=
+
+# tags are comma separated with spaces allowed
+tags=Systematic conservation planning, spatial conservation prioritisation, Marxan, gap analysis
+
+homepage=http://anotherbobsmith.wordpress.com/software/cluz/
+tracker=http://anotherbobsmith.wordpress.com/software/cluz/
+repository=http://anotherbobsmith.wordpress.com/software/cluz/
+icon=icon.png
+# experimental flag
+experimental=False
+
+# deprecated flag (applies to the whole plugin, not just a single versiondeprecated=False
+

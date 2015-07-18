@@ -1,0 +1,717 @@
+# -*- coding: utf-8 -*-
+"""
+/***************************************************************************
+                                 A QGIS plugin
+ CLUZ for QGIS
+                              -------------------
+        begin                : 18-07-2015
+        copyright            : (C) 2015 by Bob Smith, DICE
+        email                : r.j.smith@kent.ac.uk
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ ***************************************************************************/
+"""
+from PyQt4.QtCore import *
+from PyQt4.QtGui import *
+from qgis.core import *
+import qgis
+
+from qgis.gui import *
+# from qgis.analysis import *
+
+from cluz_form_distribution import Ui_distributionDialog
+from cluz_form_richness import Ui_richnessDialog
+from cluz_form_inputs import Ui_inputsDialog
+from cluz_form_marxan import Ui_marxanDialog
+from cluz_form_load import Ui_loadDialog
+from cluz_form_calibrate import Ui_calibrateDialog
+from cluz_form_minpatch import Ui_minpatchDialog
+
+import os
+import csv
+import subprocess
+import time
+
+import cluz_setup
+import cluz_functions2
+import cluz_display
+import minpatch_main
+
+from cluz_setup import MinPatchObject
+
+class distributionDialog(QDialog, Ui_distributionDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+        self.loadFeatureList(setupObject)
+        self.setInitialShapeFilePath(setupObject)
+
+        QObject.connect(self.filePathButton, SIGNAL("clicked()"), self.setDistShapeFile)
+        QObject.connect(self.okButton, SIGNAL("clicked()"), lambda: self.runDisplayDistributionMaps(setupObject))
+
+    def setDistShapeFile(self):
+        distShapefilePathNameText = QFileDialog.getSaveFileName(self, 'Save new shapefile', '*.shp')
+        self.filePathlineEdit.setText(distShapefilePathNameText)
+
+    def loadFeatureList(self, setupObject):
+        featList = setupObject.targetDict.keys()
+        featList.sort()
+        featStringList = []
+        for aFeat in featList:
+            aString = str(aFeat) + " - " + setupObject.targetDict[aFeat][0]
+            featStringList.append(aString)
+        self.featListWidget.addItems(featStringList)
+
+    def setInitialShapeFilePath(self, setupObject):
+        baseName = os.path.dirname(setupObject.puPath)
+        distShapeFileName = "cluz_dist"
+        distShapeFileNameNumber = 1
+        while os.path.exists(baseName + os.sep + distShapeFileName + str(distShapeFileNameNumber) + ".shp"):
+            distShapeFileNameNumber += 1
+        distShapeFileFullPath = baseName + os.sep + distShapeFileName + str(distShapeFileNameNumber) + ".shp"
+        self.filePathlineEdit.setText(distShapeFileFullPath)
+
+    def runDisplayDistributionMaps(self, setupObject):
+        if self.intervalRadioButton.isChecked():
+            legendType = "equal_interval"
+        else:
+            legendType = "equal_area"
+        distShapeFilePathName = self.filePathlineEdit.text()
+        selectedFeatList = [item.text() for item in self.featListWidget.selectedItems()]
+        selectedFeatIDList = [int(item.split(" - ")[0]) for item in selectedFeatList]
+
+        abundValuesDict = cluz_display.createDistributionMapShapefile(setupObject, distShapeFilePathName, selectedFeatIDList)
+        cluz_display.displayDistributionMaps(setupObject, distShapeFilePathName, abundValuesDict, legendType, selectedFeatIDList)
+
+        self.close()
+
+class richnessDialog(QDialog, Ui_richnessDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+
+        (countName, rangeName, irrepName) = self.returnInitialFieldNames(setupObject)
+        self.countLineEdit.setText(countName)
+        self.rangeLineEdit.setText(rangeName)
+        # self.irrepLineEdit.setText(irrepName)
+
+        typeList = self.produceTypeTextList(setupObject)
+        self.typeListWidget.addItems(typeList)
+
+        QObject.connect(self.okButton, SIGNAL("clicked()"), lambda: self.createRichnessResults(setupObject))
+
+    def returnInitialFieldNames(self, setupObject):
+        puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+        fieldNameList = [field.name() for field in puLayer.pendingFields()]
+
+        countName = "F_COUNT"
+        countSuffix = ""
+        if countName in fieldNameList:
+            countSuffix = 1
+            while (countName + str(countSuffix)) in fieldNameList:
+                countSuffix += 1
+        finalCountName = countName + str(countSuffix)
+
+        rangeName = "R_RICH"
+        rangeSuffix = ""
+        if rangeName in fieldNameList:
+            rangeSuffix = 1
+            while (rangeName + str(rangeSuffix)) in fieldNameList:
+                rangeSuffix += 1
+        finalRangeName = rangeName + str(rangeSuffix)
+
+        # irrepName = "IRREP"
+        # irrepSuffix = ""
+        # if irrepName in fieldNameList:
+        #     irrepSuffix = 1
+        #     while (irrepName + str(irrepSuffix)) in fieldNameList:
+        #         irrepSuffix += 1
+        # finalIrrepName = irrepName + str(irrepSuffix)
+        finalIrrepName = "Whatever"
+
+        return (finalCountName, finalRangeName, finalIrrepName)
+
+    def produceTypeTextList(self, setupObject):
+        typeTextList = []
+        typeDict = {}
+        for featID in setupObject.targetDict:
+            featType = setupObject.targetDict[featID][1]
+            try:
+                featCount = typeDict[featType]
+                featCount += 1
+            except KeyError:
+                featCount = 1
+            typeDict[featType] = featCount
+
+        typeList = typeDict.keys()
+        typeList.sort()
+        for aType in typeList:
+            typeText = "Type " + str(aType) + " (" + str(typeDict[aType]) + " features)"
+            typeTextList.append(typeText)
+
+        return typeTextList
+
+    def createRichnessResults(self, setupObject):
+        selectedTypeTextList = [item.text() for item in self.typeListWidget.selectedItems()]
+        selectedTypeList = [int(item.split(" ")[1]) for item in selectedTypeTextList]
+        puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+        fieldNameList = [field.name() for field in puLayer.pendingFields()]
+        progressString = "details_fine"
+
+        if len(selectedTypeList) == 0:
+            qgis.utils.iface.messageBar().pushMessage("Calculating richness", "No type codes have been selected.", QgsMessageBar.WARNING, 3)
+            progressString = "stop"
+        if self.countBox.isChecked() is False and self.rangeBox.isChecked() is False and self.irrepBox.isChecked() is False:
+            qgis.utils.iface.messageBar().pushMessage("Calculating richness", "No options have been selected.", QgsMessageBar.WARNING, 3)
+            progressString = "stop"
+
+        if self.countBox.isChecked() and progressString == "details_fine":
+            countFieldName = self.countLineEdit.text()
+            if countFieldName in fieldNameList:
+                qgis.utils.iface.messageBar().pushMessage("Feature Count field name duplication", "The planning unit layer already contains a field named " + countFieldName + ". Please choose another name.", QgsMessageBar.WARNING)
+            elif countFieldName == "":
+                qgis.utils.iface.messageBar().pushMessage("Feature Count field name blank", "The Feature Count name field is blank. Please choose a name.", QgsMessageBar.WARNING)
+            elif len(countFieldName) > 10:
+                qgis.utils.iface.messageBar().pushMessage("Invalid field name", "The Feature Count field name cannot be more than 10 characters long.", QgsMessageBar.WARNING)
+            else:
+                cluz_functions2.produceCountField(setupObject, countFieldName, selectedTypeList)
+                cluz_display.displayGraduatedLayer(setupObject, countFieldName, "Feature count", 2) #2 is yellow to green QGIS legend code
+
+                qgis.utils.iface.messageBar().pushMessage("Richness results", "The fields have been successfully added to the planning unit layer attribute table.", QgsMessageBar.INFO, 3)
+                self.close()
+
+        if self.rangeBox.isChecked() and progressString == "details_fine":
+            rangeFieldName = self.rangeLineEdit.text()
+            if rangeFieldName in fieldNameList:
+                qgis.utils.iface.messageBar().pushMessage("Restricted Range Richness field name duplication", "The planning unit layer already contains a field named " + rangeFieldName + ". Please choose another name.", QgsMessageBar.WARNING)
+            elif rangeFieldName == "":
+                qgis.utils.iface.messageBar().pushMessage("Restricted Range Richness field name blank", "The Restricted Range Richness name field is blank. Please choose a name.", QgsMessageBar.WARNING)
+            elif len(rangeFieldName) > 10:
+                qgis.utils.iface.messageBar().pushMessage("Invalid field name", "The Restricted Range Richness field name cannot be more than 10 characters long.", QgsMessageBar.WARNING)
+            else:
+                cluz_functions2.produceRestrictedRangeField(setupObject, rangeFieldName, selectedTypeList)
+                cluz_display.displayGraduatedLayer(setupObject, rangeFieldName, "Restricted Range score", 2) #2 is yellow to green QGIS legend code
+
+                qgis.utils.iface.messageBar().pushMessage("Richness results", "The fields have been successfully added to the planning unit layer attribute table.", QgsMessageBar.INFO, 3)
+                self.close()
+
+        # if self.irrepBox.isChecked() and progressString == "details_fine":
+        #     irrepFieldName = self.irrepLineEdit.text()
+        #     if irrepFieldName in fieldNameList:
+        #         qgis.utils.iface.messageBar().pushMessage("Irreplaceability field name duplication", "The planning unit layer already contains a field named " + irrepFieldName + ". Please choose another name.", QgsMessageBar.WARNING)
+        #     elif irrepFieldName == "":
+        #         qgis.utils.iface.messageBar().pushMessage("Irreplaceability field name blank", "The Restricted Range Richness name field is blank. Please choose a name.", QgsMessageBar.WARNING)
+        #     elif len(irrepFieldName) > 10:
+        #         qgis.utils.iface.messageBar().pushMessage("Invalid field name", "The Irreplaceability field name cannot be more than 10 characters long.", QgsMessageBar.WARNING)
+        #     else:
+        #         combSize, puSize = cluz_functions2.calcIrrepCombinationSize(setupObject, selectedTypeList)
+        #         cluz_functions2.produceIrrepField(setupObject, irrepFieldName, selectedTypeList, combSize, puSize)
+        #         cluz_display.displayGraduatedLayer(setupObject, irrepFieldName, "Irreplaceability score", 2) #2 is yellow to green QGIS legend code
+        #
+        #         qgis.utils.iface.messageBar().pushMessage("Irreplaceability results", "The fields have been successfully added to the planning unit layer attribute table.", QgsMessageBar.INFO, 3)
+        #         self.close()
+
+class inputsDialog(QDialog, Ui_inputsDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+        self.boundextBox.setEnabled(False)
+
+        QObject.connect(self.okButton, SIGNAL("clicked()"), lambda: self.setCreateMarxanInputFiles(setupObject))
+
+    def setCreateMarxanInputFiles(self, setupObject):
+        messageStringList = []
+        if self.targetBox.isChecked():
+            cluz_functions2.createSpecDatFile(setupObject)
+            messageStringList.append("spec.dat")
+
+        if self.puBox.isChecked():
+            cluz_functions2.createPuDatFile(setupObject)
+            messageStringList.append("pu.dat")
+
+        if self.boundBox.isChecked():
+            if self.boundextBox.isChecked() and self.boundextBox.isEnabled():
+                extEdgeBool = True
+            else:
+                extEdgeBool = False
+            cluz_functions2.createBoundDatFile(setupObject, extEdgeBool)
+            qgis.utils.iface.mainWindow().statusBar().showMessage("")
+            messageStringList.append("bound.dat")
+
+        if len(messageStringList) > 0:
+            messageString = ""
+            for aString in messageStringList:
+                messageString += aString + ", "
+            finalMessageString = messageString[:-2]
+
+            qgis.utils.iface.messageBar().pushMessage("Marxan files:", "The following files have been produced: " + finalMessageString, QgsMessageBar.INFO, 3)
+
+        self.close()
+
+class marxanDialog(QDialog, Ui_marxanDialog):
+    def __init__(self, iface, setupObject, targetsMetAction):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+
+        self.boundLineEdit.setVisible(False)
+
+        self.iterLineEdit.setText(str(setupObject.numIter))
+        self.runLineEdit.setText(str(setupObject.numRuns))
+        outputName = cluz_functions2.returnOutputName(setupObject)
+        self.outputLineEdit.setText(outputName)
+        self.boundLineEdit.setText(str(setupObject.blmValue))
+        self.parallelListWidget.addItems(["2", "3", "4", "5"])
+        self.parallelListWidget.setCurrentRow(0)
+
+        if setupObject.boundFlag == True:
+            self.boundCheckBox.setChecked(True)
+            self.boundLineEdit.setVisible(True)
+
+        if setupObject.extraOutputsFlag == True:
+            self.extraCheckBox.setChecked(True)
+
+        self.missingLineEdit.setText(str(setupObject.targetProp))
+        self.propLineEdit.setText(str(setupObject.startProp))
+
+        QObject.connect(self.runButton, SIGNAL("clicked()"), lambda: self.runMarxan(setupObject, targetsMetAction))
+
+    def runMarxan(self, setupObject, targetsMetAction):
+        numIter = int(self.iterLineEdit.text())
+        numRun = int(self.runLineEdit.text())
+        outputName = str(self.outputLineEdit.text())
+        setupObject.outputName = outputName
+        if self.boundCheckBox.isChecked():
+            blmValue = float(self.boundLineEdit.text())
+        else:
+            blmValue = 0
+        missingProp = float(self.missingLineEdit.text())
+        initialProp = float(self.propLineEdit.text())
+
+        extraOutputsBool = self.extraCheckBox.isChecked()
+
+        if self.parallelCheckBox.isChecked():
+            numParallelAnalyses = int(self.parallelListWidget.selectedItems()[0].text())
+        else:
+            numParallelAnalyses = 1
+
+        checkMarxanInputValuesBool = cluz_functions2.checkMarxanInputValuesBool(self, numIter, numRun, blmValue, missingProp, initialProp)
+        if checkMarxanInputValuesBool == True:
+            cluz_functions2.createSpecDatFile(setupObject)
+            setupObject = cluz_functions2.marxanUpdateSetupObject(setupObject, outputName, numIter, numRun, blmValue, extraOutputsBool, missingProp, initialProp)
+            cluz_setup.updateClzSetupFile(setupObject)
+            self.close()
+
+            if numParallelAnalyses == 1:
+                marxanInputDict = cluz_functions2.marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool)
+                cluz_functions2.makeMarxanInputFile(setupObject, marxanInputDict)
+                marxanBatFileName = cluz_functions2.makeMarxanBatFile(setupObject)
+                subprocess.Popen([marxanBatFileName])
+                cluz_functions2.waitingForMarxan(setupObject, outputName)
+
+                bestOutputFile = setupObject.outputPath + os.sep + outputName + "_best.txt"
+                summedOutputFile = setupObject.outputPath + os.sep + outputName + "_ssoln.txt"
+
+            if numParallelAnalyses > 1:
+                parallelAnalysesDetailsList = cluz_functions2.makeParallelAnalysesDetailsList(numParallelAnalyses, outputName, numRun)
+                for (numRun, parallelOutputName) in parallelAnalysesDetailsList:
+                    marxanInputDict = cluz_functions2.marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool)
+                    cluz_functions2.makeMarxanInputFile(setupObject, marxanInputDict)
+                    marxanBatFileName = cluz_functions2.makeMarxanBatFile(setupObject)
+                    subprocess.Popen([marxanBatFileName])
+                    time.sleep(2)
+
+                cluz_functions2.waitingForParallelMarxan(setupObject, parallelAnalysesDetailsList)
+
+                cluz_functions2.makeBestParralelFile(setupObject, outputName, parallelAnalysesDetailsList)
+                bestOutputFile = setupObject.outputPath + os.sep + outputName + "_best.txt"
+
+                cluz_functions2.makeSummedParralelFile(setupObject, outputName, parallelAnalysesDetailsList)
+                summedOutputFile = setupObject.outputPath + os.sep + outputName + "_ssoln.txt"
+
+            cluz_functions2.addBestMarxanOutputToPUShapefile(setupObject, bestOutputFile, "Best")
+            cluz_functions2.addSummedMarxanOutputToPUShapefile(setupObject, summedOutputFile, "SF_Score")
+
+            cluz_display.reloadPULayer(setupObject)
+            cluz_display.removePreviousMarxanLayers()
+            bestLayerName = "Best (" + outputName + ")"
+            summedLayerName = "SF_Score (" + outputName + ")"
+            cluz_display.displayBestOutput(setupObject, "Best", bestLayerName)
+            cluz_display.displayGraduatedLayer(setupObject, "SF_Score", summedLayerName, 1) #1 is SF legend code
+
+            targetsMetAction.setEnabled(True)
+
+class loadDialog(QDialog, Ui_loadDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+
+        self.bestLabel.setVisible(False)
+        self.bestLineEdit.setVisible(False)
+        self.bestNameLineEdit.setVisible(False)
+        self.bestButton.setVisible(False)
+
+        self.summedLabel.setVisible(False)
+        self.summedLineEdit.setVisible(False)
+        self.summedNameLineEdit.setVisible(False)
+        self.summedButton.setVisible(False)
+
+        (bestName, summedName) = self.returnInitialFieldNames(setupObject)
+        self.bestNameLineEdit.setText(bestName)
+        self.summedNameLineEdit.setText(summedName)
+
+        QObject.connect(self.bestButton, SIGNAL("clicked()"), self.setBestPath)
+        QObject.connect(self.summedButton, SIGNAL("clicked()"), self.setSummedPath)
+        QObject.connect(self.okButton, SIGNAL("clicked()"), lambda: self.loadPreviousMarxanResults(setupObject))
+
+    def setBestPath(self):
+        bestPathNameText = QFileDialog.getOpenFileName(self, 'Select Marxan best portfolio output', '*.txt')
+        if bestPathNameText != None:
+            self.bestLineEdit.setText(bestPathNameText)
+
+    def setSummedPath(self):
+        summedPathNameText = QFileDialog.getOpenFileName(self, 'Select Marxan summed solution output', '*.txt')
+        if summedPathNameText != None:
+            self.summedLineEdit.setText(summedPathNameText)
+
+    def returnInitialFieldNames(self, setupObject):
+        puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+        fieldNameList = [field.name() for field in puLayer.pendingFields()]
+        bestName = "IMP_BEST"
+        bestSuffix = ""
+        if bestName in fieldNameList:
+            bestSuffix = 1
+            while (bestName + str(bestSuffix)) in fieldNameList:
+                bestSuffix += 1
+        finalBestName = bestName + str(bestSuffix)
+
+        summedName = "IMP_SUM"
+        summedSuffix = ""
+        if summedName in fieldNameList:
+            summedSuffix = 1
+            while (summedName + str(summedSuffix)) in fieldNameList:
+                summedSuffix += 1
+        finalSummedName = summedName + str(summedSuffix)
+
+        return (finalBestName, finalSummedName)
+
+    def loadPreviousMarxanResults(self, setupObject):
+        bestFieldName = self.bestNameLineEdit.text()
+        summedFieldName = self.summedNameLineEdit.text()
+        if self.bestCheckBox.isChecked():
+            bestPath = self.bestLineEdit.text()
+        else:
+            bestPath = "blank"
+        if self.summedCheckBox.isChecked():
+            summedPath = self.summedLineEdit.text()
+        else:
+            summedPath = "blank"
+        puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+        fieldNameList = [field.name() for field in puLayer.pendingFields()]
+        progressString = "check_files"
+        if bestFieldName in fieldNameList:
+            QMessageBox.warning(self,"Best field name duplication", "The planning unit theme already contains a field named " + bestFieldName + ". Please choose another name.")
+            progressString = "stop"
+        if summedFieldName in fieldNameList:
+            QMessageBox.warning(self,"Summed field name duplication", "The planning unit theme already contains a field named " + summedFieldName + ". Please choose another name.")
+            progressString = "stop"
+        if len(bestFieldName) > 10:
+            QMessageBox.warning(self,"Invalid field name", "The Best field name cannot be more than 10 characters long.")
+            progressString = "stop"
+        if len(summedFieldName) > 10:
+            QMessageBox.warning(self,"Invalid field name", "The Summed field name cannot be more than 10 characters long.")
+            progressString = "stop"
+        if progressString == "check_files":
+            self.close()
+            if bestPath <> "blank":
+                if os.path.isfile(bestPath):
+                    with open(bestPath, 'rb') as f:
+                        bestReader = csv.reader(f)
+                        bestHeader = next(bestReader, None)  # skip the headers
+                    if bestHeader == setupObject.bestHeadingFieldNames:
+                        cluz_functions2.addBestMarxanOutputToPUShapefile(setupObject, bestPath, bestFieldName)
+                        bestShapefileName = bestFieldName
+                        cluz_display.displayBestOutput(setupObject, bestFieldName, bestShapefileName)
+                    else:
+                        QMessageBox.warning(self,"Invalid file","The specified Marxan best output file is incorrectly formatted. It must contain only two fields named planning_unit and solution.")
+                else:
+                    QMessageBox.warning(self,"Incorrect pathname","The specified pathname for the Marxan best output is invalid. Please choose another one.")
+            if summedPath <> "blank":
+                if os.path.isfile(summedPath):
+                    with open(summedPath, 'rb') as f:
+                        summedReader = csv.reader(f)
+                        summedHeader = next(summedReader, None)  # skip the headers
+                    if summedHeader == setupObject.summedHeadingFieldNames:
+                        cluz_functions2.addSummedMarxanOutputToPUShapefile(setupObject, summedPath, summedFieldName)
+                        summedShapefileName = summedFieldName
+                        cluz_display.displayGraduatedLayer(setupObject, summedFieldName, summedShapefileName, 1) #1 is SF legend code
+                    else:
+                        QMessageBox.warning(self,"Invalid file","The specified Marxan summed output file is incorrectly formatted. It must contain only two fields named planning_unit and number")
+                else:
+                    QMessageBox.warning(self,"Incorrect pathname","The specified pathname for the Marxan summed output is invalid. Please choose another one")
+            if bestPath <> "blank" or summedPath <> "blank":
+                cluz_display.reloadPULayer(setupObject)
+
+class calibrateDialog(QDialog, Ui_calibrateDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+
+        parameterList = ["BLM", "Number of iterations", "Number of runs", "SPF"]
+        self.paraComboBox.addItems(parameterList)
+        self.paraComboBox.activated.connect(self.combo_chosen)
+
+        self.iterLineEdit.setText(str(setupObject.numIter))
+        self.runLineEdit.setText(str(setupObject.numRuns))
+        self.boundLineEdit.setText(str(setupObject.blmValue))
+        self.boundLabel.setEnabled(False)
+        self.boundLineEdit.setEnabled(False)
+
+        QObject.connect(self.saveResultsButton, SIGNAL("clicked()"), self.saveResultsFile)
+        QObject.connect(self.runButton, SIGNAL("clicked()"), lambda: self.runSimpleCalibrateAnalysis(setupObject))
+
+    def combo_chosen(self):
+        self.iterLabel.setEnabled(True)
+        self.iterLineEdit.setEnabled(True)
+        self.runLabel.setEnabled(True)
+        self.runLineEdit.setEnabled(True)
+        self.boundLabel.setEnabled(True)
+        self.boundLineEdit.setEnabled(True)
+
+        parameterText = self.paraComboBox.currentText()
+        if parameterText == "Number of iterations":
+            self.iterLabel.setEnabled(False)
+            self.iterLineEdit.setEnabled(False)
+        elif parameterText == "Number of runs":
+            self.runLabel.setEnabled(False)
+            self.runLineEdit.setEnabled(False)
+        elif parameterText == "BLM":
+            self.boundLabel.setEnabled(False)
+            self.boundLineEdit.setEnabled(False)
+
+    def saveResultsFile(self):
+        resultsFilePath = QFileDialog.getSaveFileName(self, 'Save Calibration results file', '*.csv')
+        self.resultsLineEdit.setText(resultsFilePath)
+
+    def runSimpleCalibrateAnalysis(self, setupObject):
+        numAnalysesText = self.numberLineEdit.text()
+        minAnalysesText = self.minLineEdit.text()
+        maxAnalysesText = self.maxLineEdit.text()
+        outputNameBase = self.outputLineEdit.text()
+        resultPathText = self.resultsLineEdit.text()
+        checkBool = True
+
+        if os.path.isfile(resultPathText) is False:
+            qgis.utils.iface.messageBar().pushMessage("Incorrect pathname", "The specified pathname for the results file is invalid. Please choose another one", QgsMessageBar.WARNING)
+            checkBool = False
+
+        if outputNameBase == "":
+            qgis.utils.iface.messageBar().pushMessage("Incorrect output basename", "The specified basename for the Marxan output files is blank. Please choose another one", QgsMessageBar.WARNING)
+            checkBool = False
+
+        try:
+            numAnalyses = int(numAnalysesText)
+            if numAnalyses < 1:
+                qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified number of analysis is incorrectly formatted. It must be an integer and greater than 0.", QgsMessageBar.WARNING)
+                checkBool = False
+        except:
+            qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified number of analysis is incorrectly formatted. It must be an integer and greater than 0.", QgsMessageBar.WARNING)
+            checkBool = False
+        try:
+            minAnalyses = float(minAnalysesText)
+            if minAnalyses < 0:
+                qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified minimum value is incorrectly formatted. It must be a number and greater than 0.", QgsMessageBar.WARNING)
+                checkBool = False
+        except:
+            qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified minimum value is incorrectly formatted. It must be a number and greater than 0.", QgsMessageBar.WARNING)
+            checkBool = False
+        try:
+            maxAnalyses = int(maxAnalysesText)
+            if maxAnalyses < 0:
+                qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified maximum value is incorrectly formatted. It must be a number and greater than 0.", QgsMessageBar.WARNING)
+                checkBool = False
+        except:
+            qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified maximum value is incorrectly formatted. It must be a number and greater than 0.", QgsMessageBar.WARNING)
+            checkBool = False
+        if checkBool == True:
+            if maxAnalyses <= minAnalyses:
+                qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified maximum value is incorrectly formatted. It must be greater than the specified minimum value.", QgsMessageBar.WARNING)
+                checkBool = False
+
+        if checkBool == True:
+            exponentialBool = self.expCheckBox.isChecked()
+            parameterValueList = cluz_functions2.makeParameterValueList(numAnalyses, minAnalyses, maxAnalyses, exponentialBool)
+
+            if self.iterLineEdit.isEnabled():
+                numIterText = self.iterLineEdit.text()
+                try:
+                    numIter = int(numIterText)
+                    numIterList = [numIter] * numAnalyses
+                    if numIter < 10000:
+                        qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified number of iterations is incorrectly formatted. It must be an integer greater than 10000 (Marxan uses 10000 temperature drops in the simulated annealing process in these analyses and the number of iterations must be greater than the number of temperature drops).", QgsMessageBar.WARNING)
+                        checkBool = False
+                except:
+                    qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified number of iterations is incorrectly formatted. It must be a positive integer.", QgsMessageBar.WARNING)
+                    checkBool = False
+            else:
+                numIterList = parameterValueList
+
+            if self.runLineEdit.isEnabled():
+                numRunText = self.runLineEdit.text()
+                try:
+                    numRun = int(numRunText)
+                    numRunList = [numRun] * numAnalyses
+                    if numRun < 1:
+                        qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified number of runs is incorrectly formatted. It must be a positive integer.", QgsMessageBar.WARNING)
+                        checkBool = False
+                except:
+                    qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified number of runs is incorrectly formatted. It must be a positive integer.", QgsMessageBar.WARNING)
+                    checkBool = False
+            else:
+                numRunList = parameterValueList
+
+            if self.boundLineEdit.isEnabled():
+                blmValueText = self.boundLineEdit.text()
+                try:
+                    blmValue = float(blmValueText)
+                    blmValueList = [blmValue] * numAnalyses
+                    if blmValue < 0:
+                        qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified BLM value is incorrectly formatted. It must be a positive number.", QgsMessageBar.WARNING)
+                        checkBool = False
+                except:
+                    qgis.utils.iface.messageBar().pushMessage("Incorrect format", "The specified BLM value is incorrectly formatted. It must be a positive number.", QgsMessageBar.WARNING)
+                    checkBool = False
+            else:
+                blmValueList = parameterValueList
+
+        if checkBool == True:
+            missingPropList = [1.0] * numAnalyses
+            initialPropList = [0.2] * numAnalyses
+            calibrateResultsDict = {}
+            for analysisNumber in range(0, numAnalyses):
+                numIter = numIterList[analysisNumber]
+                numRun = numRunList[analysisNumber]
+                blmValue = blmValueList[analysisNumber]
+                missingProp = missingPropList[analysisNumber]
+                initialProp = initialPropList[analysisNumber]
+                outputName = outputNameBase + str(analysisNumber + 1)
+                extraOutputsBool = True
+                marxanInputDict = cluz_functions2.marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool)
+                cluz_functions2.makeMarxanInputFile(setupObject, marxanInputDict)
+                marxanBatFileName = cluz_functions2.makeMarxanBatFile(setupObject)
+                subprocess.Popen([marxanBatFileName])
+                cluz_functions2.waitingForMarxan(setupObject, outputName)
+
+                calibrateResultsDict[analysisNumber] = cluz_functions2.makeAnalysisResultsDict(setupObject, marxanInputDict)
+
+            cluz_functions2.makeCalibrateOutputFile(resultPathText, calibrateResultsDict)
+
+            self.close()
+
+class minpatchDialog(QDialog, Ui_minpatchDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+
+        inputText = "Marxan input folder: " + setupObject.inputPath
+        self.inputLabel.setText(inputText)
+        outputText = "Marxan output folder: " + setupObject.outputPath
+        self.outputLabel.setText(outputText)
+
+        marxanFileList = self.makeMarxanFileList(setupObject)
+        if len(marxanFileList) > 0:
+            self.fileListWidget.addItems(marxanFileList)
+        else:
+            self.runButton.setEnabled(False)
+            qgis.utils.iface.messageBar().pushMessage("No files found", "The specified Marxan output folder does not contain any individual portfolio files that can be analysed in MinPatch.", QgsMessageBar.WARNING)
+
+        QObject.connect(self.browseButton, SIGNAL("clicked()"), self.setminpatchDetailFile)
+        QObject.connect(self.runButton, SIGNAL("clicked()"), lambda: self.startMinPatch(setupObject))
+
+    def setminpatchDetailFile(self):
+        minpatchDetailPathNameText = QFileDialog.getOpenFileName(self, 'Select MinPatch details file', '*.dat')
+        self.detailsLineEdit.setText(minpatchDetailPathNameText)
+
+    def makeMarxanFileList(self, setupObject):
+        marxanFileList = []
+
+        fileList = os.listdir(setupObject.outputPath)
+        analysisList = []
+        for aFile in fileList:
+            if aFile.endswith('_best.txt'):
+                analysisList.append(aFile[0:-9])
+
+        for aPathName in analysisList:
+            runPath = aPathName + "_r"
+            fileCount = 0
+            for bFile in fileList:
+                if bFile.startswith(runPath):
+                    fileCount += 1
+            if fileCount > 0:
+                marxanFileList.append(aPathName + " - " + str(fileCount) + " files")
+
+        return marxanFileList
+
+    def startMinPatch(self, setupObject):
+        minpatchObject = MinPatchObject()
+        runMinPatchBool = True
+
+        detailsDatPath = self.detailsLineEdit.text()
+        if os.path.isfile(detailsDatPath):
+            with open(detailsDatPath, 'rb') as f:
+                detailsReader = csv.reader(f)
+                detailsHeader = next(detailsReader, None)  # skip the headers
+            if detailsHeader == ["id", "area", "zone", "patch_area", "radius"]:
+                minpatchObject.detailsDatPathName = detailsDatPath
+            else:
+                qgis.utils.iface.messageBar().pushMessage("The specified MinPatch details file is incorrectly formatted. It must contain five fields named id, area ,zone ,patch_area and radius.", QgsMessageBar.WARNING)
+                runMinPatchBool = False
+        else:
+            qgis.utils.iface.messageBar().pushMessage("Incorrect pathname", "The specified pathname for the MinPatch details file is invalid. Please choose another one", QgsMessageBar.WARNING)
+            runMinPatchBool = False
+
+        blmText = self.blmLineEdit.text()
+        try:
+            blmNumber = float(blmText)
+            if blmNumber >= 0:
+                minpatchObject.blm = blmNumber
+            else:
+                qgis.utils.iface.messageBar().pushMessage("Incorrect BLM format", "The BLM value must be a non-negative number.", QgsMessageBar.WARNING)
+                runMinPatchBool = False
+        except:
+            qgis.utils.iface.messageBar().pushMessage("Incorrect BLM format", "The BLM value must be a non-negative number.", QgsMessageBar.WARNING)
+            runMinPatchBool = False
+
+        selectedItemsList = self.fileListWidget.selectedItems()
+        if len(selectedItemsList) > 0:
+            selectedMarxanFileText = [item.text() for item in self.fileListWidget.selectedItems()][0]
+
+            suffixText = selectedMarxanFileText.split(" - ")[-1]
+            numberText = suffixText.split(" ")[0]
+            runNumberLen = len(numberText) + 9 #Calcs length of text to remove from end of string
+            minpatchObject.marxanFileName = selectedMarxanFileText[0: -runNumberLen]
+        else:
+            qgis.utils.iface.messageBar().pushMessage("No files selected", "Please select one of the sets of files before proceeding.", QgsMessageBar.WARNING)
+            runMinPatchBool = False
+
+        minpatchObject.removeBool = self.removeCheckBox.isChecked()
+        minpatchObject.addBool = self.addCheckBox.isChecked()
+        minpatchObject.whittleBool = self.whittleCheckBox.isChecked()
+        minpatchObject.marxanBool = self.marxanCheckBox.isChecked()
+
+        if runMinPatchBool == True:
+            minpatch_main.runMinPatch(setupObject, minpatchObject)
+            self.close()
