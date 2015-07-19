@@ -28,8 +28,8 @@ email=r.j.smith@kent.ac.uk
 tags=Systematic conservation planning, spatial conservation prioritisation, Marxan, gap analysis
 
 homepage=http://anotherbobsmith.wordpress.com/software/cluz/
-tracker=http://anotherbobsmith.wordpress.com/software/cluz/
-repository=http://anotherbobsmith.wordpress.com/software/cluz/
+tracker=http://github.com/AnotherBobSmith/CLUZ/issues/
+repository=http://github.com/AnotherBobSmith/CLUZ/
 icon=icon.png
 # experimental flag
 experimental=False
