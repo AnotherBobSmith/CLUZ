@@ -1,5 +1,5 @@
 # CLUZ
-# CLUZ plugin for QGIS
+CLUZ plugin for QGIS
 
 CLUZ (Conservation Land-Use Zoning software) is a QGIS plug-in that allows users to design protected area networks
 and other conservation landscapes and seascapes. It can be used for on-screen planning and also acts as a link for
