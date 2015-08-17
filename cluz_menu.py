@@ -4,7 +4,7 @@
                                  A QGIS plugin
  CLUZ for QGIS
                               -------------------
-        begin                : 18-07-2015
+        begin                : 17-08-2015
         copyright            : (C) 2015 by Bob Smith, DICE
         email                : r.j.smith@kent.ac.uk
  ***************************************************************************/
@@ -18,6 +18,7 @@
  *                                                                         *
  ***************************************************************************/
 """
+
 # Import the PyQt and QGIS libraries
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
@@ -88,10 +89,10 @@ class Cluz:
         # Create action that will start plugin configuration
         self.SetupAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_setup.png"), "View and edit CLUZ setup file", self.iface.mainWindow())
         self.CreateAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_create.png"), "Create initial CLUZ files", self.iface.mainWindow())
-        self.ConvertVecAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_convpoly.png"), "Convert and import polyline or polygon layers into Marxan abundance file", self.iface.mainWindow())
-        self.ConvertCsvAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_convcsv.png"), "Import data from csv table into Marxan abundance file", self.iface.mainWindow())
+        self.ConvertVecAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_convpoly.png"), "Convert polyline or polygon themes to Marxan abundance data", self.iface.mainWindow())
+        self.ConvertCsvAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_convcsv.png"), "Import fields from table to Marxan abundance file", self.iface.mainWindow())
 
-        self.RemoveAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_rem.png"), "Remove features from CLUZ target table and Marxan abundance file", self.iface.mainWindow())
+        self.RemoveAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_rem.png"), "Remove features from CLUZ tables", self.iface.mainWindow())
         self.RecalcAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_recalc.png"), "Recalculate target table data", self.iface.mainWindow())
         self.TroubleAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_trouble.png"), "Troubleshoot all CLUZ files", self.iface.mainWindow())
 
@@ -104,13 +105,13 @@ class Cluz:
         self.CalibrateAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_calibrate.png"), "Calibrate Marxan parameters", self.iface.mainWindow())
         self.MinPatchAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_minpatch.png"), "Run MinPatch", self.iface.mainWindow())
 
-        self.TargetAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_target.png"), "Open Target Table", self.iface.mainWindow())
-        self.AbundAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_abund.png"), "Display Marxan Abundance File Data", self.iface.mainWindow())
-        self.TargetsMetAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_target_met.png"), "Open Marxan Target Results Table", self.iface.mainWindow())
-        self.BestToEarmarkedAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_best_ear.png"), "Change Status of Best Units to Earmarked", self.iface.mainWindow())
+        self.TargetAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_target.png"), "Open target table", self.iface.mainWindow())
+        self.AbundAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_abund.png"), "Open abundance table", self.iface.mainWindow())
+        self.TargetsMetAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_target_met.png"), "Open Marxan results table", self.iface.mainWindow())
+        self.BestToEarmarkedAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_best_ear.png"), "Change the status of the Best units to Earmarked", self.iface.mainWindow())
         self.TargetsMetAction.setEnabled(False)
-        self.ChangeAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_change.png"), "Change Planning Unit Status", self.iface.mainWindow())
-        self.IdentifyAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_identify.png"), "Identify Features in Planning Unit", self.iface.mainWindow())
+        self.ChangeAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_change.png"), "Change planning unit status", self.iface.mainWindow())
+        self.IdentifyAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_identify.png"), "Identify features in planning unit", self.iface.mainWindow())
 
         # connect the action to the run method
         self.SetupAction.triggered.connect(lambda: self.runSetupDialog(setupObject))
@@ -405,9 +406,10 @@ class Cluz:
     def runAbundSelectDialog(self,setupObject):
         checkSetupFileLoaded(self, setupObject)
         openSetupDialogIfSetupFilesIncorrect(self, setupObject)
-        if setupObject.abundPUKeyDict == "blank":
-            setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
-        checkCreateAddFiles(setupObject)
+        if setupObject.setupStatus == "values_set" or setupObject.setupStatus == "files_checked":
+            if setupObject.abundPUKeyDict == "blank":
+                setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
+            checkCreateAddFiles(setupObject)
 
         if setupObject.setupStatus == "files_checked":
             self.abundSelectDialog = abundSelectDialog(self, setupObject)
@@ -419,6 +421,7 @@ class Cluz:
     def targetsMetDialog(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
         openSetupDialogIfSetupFilesIncorrect(self, setupObject)
+        setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
         checkCreateAddFiles(setupObject)
 
         if setupObject.setupStatus == "files_checked":
@@ -431,16 +434,21 @@ class Cluz:
     def changeBestToEarmarked(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
         openSetupDialogIfSetupFilesIncorrect(self, setupObject)
-        setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
-        checkCreateAddFiles(setupObject)
-        cluz_functions3.changeBestToEarmarkedPUs(setupObject)
+        if setupObject.setupStatus == "values_set" or setupObject.setupStatus == "files_checked":
+            if setupObject.abundPUKeyDict == "blank":
+                setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
+            checkCreateAddFiles(setupObject)
+
+        if setupObject.setupStatus == "files_checked":
+            cluz_functions3.changeBestToEarmarkedPUs(setupObject)
 
     def runChangeStatusDialog(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
         openSetupDialogIfSetupFilesIncorrect(self, setupObject)
-        if setupObject.abundPUKeyDict == "blank":
-            setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
-        checkCreateAddFiles(setupObject)
+        if setupObject.setupStatus == "values_set" or setupObject.setupStatus == "files_checked":
+            if setupObject.abundPUKeyDict == "blank":
+                setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
+            checkCreateAddFiles(setupObject)
 
         if setupObject.setupStatus == "files_checked":
             self.changeStatusDialog = changeStatusDialog(self, setupObject)
@@ -452,12 +460,14 @@ class Cluz:
     def showFeaturesInPU(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
         openSetupDialogIfSetupFilesIncorrect(self, setupObject)
-        if setupObject.abundPUKeyDict == "blank":
-            setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
-        checkCreateAddFiles(setupObject)
+        if setupObject.setupStatus == "values_set" or setupObject.setupStatus == "files_checked":
+            if setupObject.abundPUKeyDict == "blank":
+                setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
+            checkCreateAddFiles(setupObject)
 
-        identifyTool = IdentifyTool(self.iface.mapCanvas(), setupObject)
-        self.iface.mapCanvas().setMapTool(identifyTool)
+        if setupObject.setupStatus == "files_checked":
+            identifyTool = IdentifyTool(self.iface.mapCanvas(), setupObject)
+            self.iface.mapCanvas().setMapTool(identifyTool)
 
 # Checks whether setup file has been loaded
 def checkSetupFileLoaded(self, setupObject):
@@ -478,6 +488,7 @@ def checkSetupFileLoaded(self, setupObject):
             setupPathNameText = QFileDialog.getOpenFileName(None, 'Open existing CLUZ setup file', '*.clz')
             try:
                 cluz_setup.updateSetupObjectFromSetupFile(setupObject, setupPathNameText)
+                checkCreateAddFiles(setupObject)
             except IOError:
                 pass
         else:
