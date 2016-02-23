@@ -2,8 +2,7 @@
 
 # Form implementation generated from reading ui file 'cluz_form_inputs.ui'
 #
-# Created: Sun Mar 08 10:57:36 2015
-#      by: PyQt4 UI code generator 4.10.3
+# Created by: PyQt4 UI code generator 4.11.4
 #
 # WARNING! All changes made in this file will be lost!
 
@@ -27,30 +26,31 @@ class Ui_inputsDialog(object):
     def setupUi(self, inputsDialog):
         inputsDialog.setObjectName(_fromUtf8("inputsDialog"))
         inputsDialog.setWindowModality(QtCore.Qt.ApplicationModal)
-        inputsDialog.resize(498, 377)
+        inputsDialog.resize(500, 380)
+        inputsDialog.setMinimumSize(QtCore.QSize(500, 380))
         self.targetBox = QtGui.QCheckBox(inputsDialog)
-        self.targetBox.setGeometry(QtCore.QRect(210, 60, 141, 17))
+        self.targetBox.setGeometry(QtCore.QRect(180, 60, 271, 17))
         self.targetBox.setObjectName(_fromUtf8("targetBox"))
         self.puBox = QtGui.QCheckBox(inputsDialog)
-        self.puBox.setGeometry(QtCore.QRect(210, 110, 161, 17))
+        self.puBox.setGeometry(QtCore.QRect(180, 110, 271, 17))
         self.puBox.setObjectName(_fromUtf8("puBox"))
         self.inputsLabel = QtGui.QLabel(inputsDialog)
-        self.inputsLabel.setGeometry(QtCore.QRect(200, 30, 301, 16))
+        self.inputsLabel.setGeometry(QtCore.QRect(170, 30, 311, 16))
         self.inputsLabel.setObjectName(_fromUtf8("inputsLabel"))
         self.boundBox = QtGui.QCheckBox(inputsDialog)
-        self.boundBox.setGeometry(QtCore.QRect(210, 160, 161, 17))
+        self.boundBox.setGeometry(QtCore.QRect(180, 160, 271, 17))
         self.boundBox.setObjectName(_fromUtf8("boundBox"))
         self.boundextBox = QtGui.QCheckBox(inputsDialog)
-        self.boundextBox.setGeometry(QtCore.QRect(250, 190, 281, 17))
+        self.boundextBox.setGeometry(QtCore.QRect(200, 190, 281, 17))
         self.boundextBox.setObjectName(_fromUtf8("boundextBox"))
         self.okButton = QtGui.QPushButton(inputsDialog)
-        self.okButton.setGeometry(QtCore.QRect(260, 320, 75, 23))
+        self.okButton.setGeometry(QtCore.QRect(230, 320, 75, 23))
         self.okButton.setObjectName(_fromUtf8("okButton"))
         self.cancelButton = QtGui.QPushButton(inputsDialog)
-        self.cancelButton.setGeometry(QtCore.QRect(360, 320, 75, 23))
+        self.cancelButton.setGeometry(QtCore.QRect(330, 320, 75, 23))
         self.cancelButton.setObjectName(_fromUtf8("cancelButton"))
         self.sponsorLabel = QtGui.QLabel(inputsDialog)
-        self.sponsorLabel.setGeometry(QtCore.QRect(20, 10, 151, 351))
+        self.sponsorLabel.setGeometry(QtCore.QRect(10, 10, 151, 351))
         self.sponsorLabel.setText(_fromUtf8(""))
         self.sponsorLabel.setPixmap(QtGui.QPixmap(_fromUtf8(":/plugins/Cluz/icons/icons/marxan_logo.png")))
         self.sponsorLabel.setObjectName(_fromUtf8("sponsorLabel"))

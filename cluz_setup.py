@@ -3,9 +3,9 @@
 /***************************************************************************
                                  A QGIS plugin
  CLUZ for QGIS
-                              -------------------
-        begin                : 18-07-2015
-        copyright            : (C) 2015 by Bob Smith, DICE
+                             -------------------
+        begin                : 2016-23-02
+        copyright            : (C) 2016 by Bob Smith, DICE
         email                : r.j.smith@kent.ac.uk
  ***************************************************************************/
 
@@ -19,6 +19,7 @@
  ***************************************************************************/
 """
 
+import qgis
 from qgis.core import *
 from qgis.gui import *
 from qgis.utils import *
@@ -26,9 +27,10 @@ from qgis.utils import *
 import os
 import csv
 import re
-import qgis
+import time
 
 import cluz_display
+
 
 
 def xxxSaveTextToFile(outputName, anItem):
@@ -42,7 +44,6 @@ def xxxSaveTextToFile(outputName, anItem):
 
 def practice(setupObject):
     layers = QgsMapLayerRegistry.instance().mapLayers()
-    nameList = []
 
     for name, layer in layers.iteritems():
         if str(name)[0:5] == "Plann":
@@ -112,7 +113,6 @@ def makeSetupDictFromSetupFile(setupFilePath):
 
 def updateSetupObjectFromSetupFile(setupObject, setupFilePath):
     setupDict = makeSetupDictFromSetupFile(setupFilePath)
-    setupFileOK = True
 
     try:
         decPlaceText = setupDict["decimal_places"]
@@ -131,38 +131,7 @@ def updateSetupObjectFromSetupFile(setupObject, setupFilePath):
         startPropText = setupDict["start_prop"]
         targetPropText = setupDict["target_prop"]
 
-        try:
-            setupObject.decimalPlaces = int(decPlaceText)
-            if setupObject.decimalPlaces > 5:
-                setupObject.decimalPlaces = 5
-        except ValueError:
-            qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The specified decimal place value in the setup file is not an integer. Please correct this.", QgsMessageBar.WARNING)
-            setupFileOK = False
-        try:
-            setupObject.numIter = int(numIterText)
-        except ValueError:
-            qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The specified number of iterations in the setup file is not an integer. Please correct this.", QgsMessageBar.WARNING)
-            setupFileOK = False
-        try:
-            setupObject.numRuns = int(numRunText)
-        except ValueError:
-            qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The specified number of runs in the setup file is not an integer. Please correct this.", QgsMessageBar.WARNING)
-            setupFileOK = False
-        try:
-            setupObject.blmValue = float(numBlmText)
-        except ValueError:
-            qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The BLM value in the setup file is not a number. Please correct this.", QgsMessageBar.WARNING)
-            setupFileOK = False
-        try:
-            setupObject.startProp = float(startPropText)
-        except ValueError:
-            qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The start proportion value in the setup file is not a number. Please correct this.", QgsMessageBar.WARNING)
-            setupFileOK = False
-        try:
-            setupObject.targetProp = float(targetPropText)
-        except ValueError:
-            qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The target proportion value in the setup file is not a number. Please correct this.", QgsMessageBar.WARNING)
-            setupFileOK = False
+        setupFileOK = checkFilesAndReturnSetupFileOKBool(setupObject, decPlaceText, numIterText, numRunText, numBlmText, startPropText, targetPropText)
 
     except KeyError:
         qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The specified setup file does not contain all of the correct factors. Please correct this.", QgsMessageBar.WARNING)
@@ -170,10 +139,46 @@ def updateSetupObjectFromSetupFile(setupObject, setupFilePath):
 
     if setupFileOK == True:
         setupObject.setupStatus = "values_set"
-
         checkStatusObjectValues(setupObject)
         if setupObject.setupStatus == "values_checked":
             setupObject.setupPath = setupFilePath
+
+def checkFilesAndReturnSetupFileOKBool(setupObject, decPlaceText, numIterText, numRunText, numBlmText, startPropText, targetPropText):
+    setupFileOK = True
+    try:
+        setupObject.decimalPlaces = int(decPlaceText)
+        if setupObject.decimalPlaces > 5:
+            setupObject.decimalPlaces = 5
+    except ValueError:
+        qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The specified decimal place value in the setup file is not an integer. Please correct this.", QgsMessageBar.WARNING)
+        setupFileOK = False
+    try:
+        setupObject.numIter = int(numIterText)
+    except ValueError:
+        qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The specified number of iterations in the setup file is not an integer. Please correct this.", QgsMessageBar.WARNING)
+        setupFileOK = False
+    try:
+        setupObject.numRuns = int(numRunText)
+    except ValueError:
+        qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The specified number of runs in the setup file is not an integer. Please correct this.", QgsMessageBar.WARNING)
+        setupFileOK = False
+    try:
+        setupObject.blmValue = float(numBlmText)
+    except ValueError:
+        qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The BLM value in the setup file is not a number. Please correct this.", QgsMessageBar.WARNING)
+        setupFileOK = False
+    try:
+        setupObject.startProp = float(startPropText)
+    except ValueError:
+        qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The start proportion value in the setup file is not a number. Please correct this.", QgsMessageBar.WARNING)
+        setupFileOK = False
+    try:
+        setupObject.targetProp = float(targetPropText)
+    except ValueError:
+        qgis.utils.iface.messageBar().pushMessage("Setup file incorrect format", "The target proportion value in the setup file is not a number. Please correct this.", QgsMessageBar.WARNING)
+        setupFileOK = False
+
+    return setupFileOK
 
 def checkStatusObjectValues(setupObject):
     setupFileCorrect = True
@@ -264,8 +269,24 @@ def checkStatusObjectValues(setupObject):
         qgis.utils.iface.messageBar().pushMessage("Incorrect target table path", "The specified target table cannot be found. Please open the View and Edit CLUZ setup file function and update the information.", QgsMessageBar.WARNING)
         setupFileCorrect = False
 
-    if setupFileCorrect == True:
+    foldersOKBool = checkFolderValues(setupObject.marxanPath, setupObject.inputPath, setupObject.outputPath)
+    if setupFileCorrect == True and foldersOKBool == True:
         setupObject.setupStatus = "values_checked"
+
+def checkFolderValues(marxanPath, inputPath, outputPath):
+    foldersOKBool = True
+    marxanDirPath = os.path.dirname(marxanPath)
+    if marxanPath == "blank" or marxanPath == "":
+        qgis.utils.iface.messageBar().pushMessage("Marxan path invalid", "The Marxan path is missing.", QgsMessageBar.WARNING)
+        foldersOKBool = False
+    elif os.path.isdir(marxanDirPath) == False:
+        qgis.utils.iface.messageBar().pushMessage("Marxan path invalid", "The specified folder containing Marxan does not exist.", QgsMessageBar.WARNING)
+        foldersOKBool = False
+    elif os.access(marxanDirPath, os.W_OK) == False:
+        qgis.utils.iface.messageBar().pushMessage("Marxan path invalid", "Running Marxan involves CLUZ creating a new input file in the folder where Marxan is stored. You do not have permission to save files into the specified folder so please move Marxan to a folder where you do have permission.", QgsMessageBar.WARNING)
+        foldersOKBool = False
+
+    return foldersOKBool
 
 def updateClzSetupFile(setupObject):
     setupFilePath = setupObject.setupPath
@@ -289,78 +310,79 @@ def updateClzSetupFile(setupObject):
     except:
         qgis.utils.iface.messageBar().pushMessage("Failed to save", "The new CLUZ setup file failed to save.", QgsMessageBar.WARNING)
 
-
-def checkPULayerPresent():
-    canvas = qgis.utils.iface.mapCanvas()
-    allLayers = canvas.layers()
-    puLayerPresentBool = False
-    for aLayer in allLayers:
-        if aLayer.name() == "Planning units":
-            puLayerPresentBool = True
-
-    return puLayerPresentBool
-
 def createAndCheckCLUZFiles(setupObject):
     if setupObject.setupStatus == "values_checked":
         checkBool = True
 
-        targetCSVFilePath = setupObject.targetPath
-        # setupObject.targetFileDate = time.ctime(os.path.getmtime(targetCSVFilePath))
-        idealReqHeaderList = ["id", "name", "type", "spf", "target", "conserved", "total", "pc_target"]
-        actualReqHeaderList = []
-        with open(targetCSVFilePath, 'rb') as f:
-            targetReader = csv.reader(f)
-            allHeaderList = targetReader.next()
-
-        for aHeader in allHeaderList:
-            lowercaseHeader = aHeader.lower()
-            if lowercaseHeader in idealReqHeaderList:
-                actualReqHeaderList.append(lowercaseHeader)
-
-        if len(actualReqHeaderList) <> len(idealReqHeaderList):
-            missingFieldText = ""
-            for bHeader in idealReqHeaderList:
-                if actualReqHeaderList.count(bHeader) == 0:
-                    missingFieldText += bHeader.capitalize() + ", "
-            missingFieldText = missingFieldText[0:-2]
-            qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The Target table is missing the following fields: " + missingFieldText + ". Please select a table with the correct format.", QgsMessageBar.WARNING)
-            checkBool = False
-
-        puvspr2FilePath = setupObject.inputPath + os.sep + "puvspr2.dat"
-        puvspr2ErrorSet = set()
-        with open(puvspr2FilePath, 'rb') as f:
-            puvspr2Reader = csv.reader(f)
-            puvspr2HeaderList = puvspr2Reader.next()
-            if puvspr2HeaderList != ["species", "pu", "amount"]:
-                puvspr2ErrorSet.add("abundHeaderFormat")
-                checkBool = False
-
-        for anErrorValue in puvspr2ErrorSet:
-            if anErrorValue == "abundHeaderFormat":
-                qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The puvspr2.dat file in the input folder is incorrectly formatted and should only have the following header names: species, pu, amount.", QgsMessageBar.WARNING)
-
-        puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
-        fields = puLayer.pendingFields()
-        fieldDetailsList = []
-        for aField in fields:
-            fieldDetailsList.append((str(aField.name()), str(aField.typeName())))
-
-        if fieldDetailsList.count(('Unit_ID', 'Integer')) == 0:
-            qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The planning unit shapefile must contain a field named Unit_ID containing integer values.", QgsMessageBar.WARNING)
-            checkBool = False
-        if fieldDetailsList.count(('Area', 'Real')) == 0:
-            qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The planning unit shapefile must contain a field named Area containing real number values.", QgsMessageBar.WARNING)
-            checkBool = False
-        if fieldDetailsList.count(('Cost', 'Real')) == 0:
-            qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The planning unit shapefile must contain a field named Cost containing real number values.", QgsMessageBar.WARNING)
-            checkBool = False
-        if fieldDetailsList.count(('Status', 'String')) == 0:
-            qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The planning unit shapefile must contain a field named Status containing text values.", QgsMessageBar.WARNING)
-            checkBool = False
+        createAndCheckTargetFile(setupObject, checkBool)
+        createAndCheckPuvspr2File(setupObject, checkBool)
+        createAndCheckPuLayerFile(setupObject, checkBool)
 
         if checkBool == True:
             setupObject.targetDict = makeTargetDict(setupObject)
             setupObject.setupStatus = "files_checked"
+
+
+def createAndCheckTargetFile(setupObject, checkBool):
+    targetCSVFilePath = setupObject.targetPath
+    setupObject.targetFileDate = time.ctime(os.path.getmtime(targetCSVFilePath))
+    targetFileFieldNameList = ["id", "name", "type", "spf", "target", "conserved", "total", "pc_target"]
+    with open(targetCSVFilePath, 'rb') as f:
+        targetReader = csv.reader(f)
+        origHeaderList = targetReader.next()
+
+    lowercaseHeaderList = []
+    for aHeader in origHeaderList:
+        lowercaseHeader = aHeader.lower()
+        lowercaseHeaderList.append(lowercaseHeader)
+
+    for aHeader in targetFileFieldNameList:
+        if lowercaseHeaderList.count(aHeader) == 0:
+            qgis.utils.iface.messageBar().pushMessage("Formatting error: ","The Target table is missing a " + aHeader + " field. Please select a table with the correct format.", QgsMessageBar.WARNING)
+            checkBool = False
+
+    return checkBool
+
+
+def createAndCheckPuvspr2File(setupObject, checkBool):
+    puvspr2FilePath = setupObject.inputPath + os.sep + "puvspr2.dat"
+    puvspr2ErrorSet = set()
+    with open(puvspr2FilePath, 'rb') as f:
+        puvspr2Reader = csv.reader(f)
+        puvspr2HeaderList = puvspr2Reader.next()
+        if puvspr2HeaderList != ["species", "pu", "amount"]:
+            puvspr2ErrorSet.add("abundHeaderFormat")
+            checkBool = False
+
+    for anErrorValue in puvspr2ErrorSet:
+        if anErrorValue == "abundHeaderFormat":
+            qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The puvspr2.dat file in the input folder is incorrectly formatted and should only have the following header names: species, pu, amount.", QgsMessageBar.WARNING)
+
+    return checkBool
+
+
+def createAndCheckPuLayerFile(setupObject, checkBool):
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+    fields = puLayer.pendingFields()
+    fieldDetailsList = []
+    for aField in fields:
+        fieldDetailsList.append((str(aField.name()), str(aField.typeName())))
+
+    if fieldDetailsList.count(('Unit_ID', 'Integer')) == 0:
+        qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The planning unit shapefile must contain a field named Unit_ID containing integer values.", QgsMessageBar.WARNING)
+        checkBool = False
+    if fieldDetailsList.count(('Area', 'Real')) == 0:
+        qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The planning unit shapefile must contain a field named Area containing real number values.", QgsMessageBar.WARNING)
+        checkBool = False
+    if fieldDetailsList.count(('Cost', 'Real')) == 0:
+        qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The planning unit shapefile must contain a field named Cost containing real number values.", QgsMessageBar.WARNING)
+        checkBool = False
+    if fieldDetailsList.count(('Status', 'String')) == 0:
+        qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The planning unit shapefile must contain a field named Status containing text values.", QgsMessageBar.WARNING)
+        checkBool = False
+
+    return checkBool
+
 
 def makeTargetDict(setupObject):
     targetDict = {}
@@ -376,15 +398,7 @@ def makeTargetDict(setupObject):
 
             for aRow in targetReader:
                 featID = int(aRow[headerList.index('id')])
-                featName = str(aRow[headerList.index('name')])
-                featType = int(aRow[headerList.index('type')])
-                featSpf = float(aRow[headerList.index('spf')])
-                featTarget = float(aRow[headerList.index('target')])
-                featConserved = float(aRow[headerList.index('conserved')])
-                featTotal = float(aRow[headerList.index('total')])
-                featPc_Target = float(aRow[headerList.index('pc_target')])
-
-                featList = [featName, featType, featSpf, featTarget, featConserved, featTotal, featPc_Target]
+                featList = makeTargetDictRowFeatList(aRow, headerList)
                 targetDict[featID] = featList
 
     except ValueError:
@@ -392,6 +406,18 @@ def makeTargetDict(setupObject):
         targetDict = "blank"
 
     return targetDict
+
+def makeTargetDictRowFeatList(aRow, headerList):
+    featName = str(aRow[headerList.index('name')])
+    featType = int(aRow[headerList.index('type')])
+    featSpf = float(aRow[headerList.index('spf')])
+    featTarget = float(aRow[headerList.index('target')])
+    featConserved = float(aRow[headerList.index('conserved')])
+    featTotal = float(aRow[headerList.index('total')])
+    featPc_Target = float(aRow[headerList.index('pc_target')])
+    featList = [featName, featType, featSpf, featTarget, featConserved, featTotal, featPc_Target]
+
+    return featList
 
 def makeAbundancePUKeyDict(setupObject):
     abundPUKeyDict = {}
@@ -467,6 +493,18 @@ def makeSporderDatFile(setupObject):
     sporderDatWriter = csv.writer(open(sporderDatName, "wb"))
     sporderDatWriter.writerow(["species", "pu", "amount"])
 
+    sporderDict = makeSporderDict(setupObject)
+    featList = sporderDict.keys()
+    featList.sort()
+    for aFeat in featList:
+        aPUDict = sporderDict[aFeat]
+        aPUList = aPUDict.keys()
+        aPUList.sort()
+        for aPUID in aPUList:
+            aAmount = aPUDict[aPUID]
+            sporderDatWriter.writerow([aFeat, aPUID, aAmount])
+
+def makeSporderDict(setupObject):
     sporderDict = {}
     abundPUKeyDict = setupObject.abundPUKeyDict
     for puID in abundPUKeyDict:
@@ -480,15 +518,17 @@ def makeSporderDatFile(setupObject):
             puDict[puID] = featAmount
             sporderDict[featID] = puDict
 
-    featList = sporderDict.keys()
-    featList.sort()
-    for aFeat in featList:
-        aPUDict = sporderDict[aFeat]
-        aPUList = aPUDict.keys()
-        aPUList.sort()
-        for aPUID in aPUList:
-            aAmount = aPUDict[aPUID]
-            sporderDatWriter.writerow([aFeat, aPUID, aAmount])
+    return sporderDict
+
+def checkPULayerPresent():
+    canvas = qgis.utils.iface.mapCanvas()
+    allLayers = canvas.layers()
+    puLayerPresentBool = False
+    for aLayer in allLayers:
+        if aLayer.name() == "Planning units":
+            puLayerPresentBool = True
+
+    return puLayerPresentBool
 
 def checkAddPlanningUnit(setupObject):
     if setupObject.setupStatus == "files_checked":
@@ -529,13 +569,7 @@ def updateTargetCSVFromTargetDict(setupObject, targetDict):
         for aRow in targetReader:
             featID = int(aRow[lowerHeaderList.index('id')])
             featTarget = float(aRow[lowerHeaderList.index('target')])
-            if featTarget > 0:
-                pcTarget = targetDict[featID][4] / featTarget
-                pcTarget *= 100
-                pcTarget = round(float(pcTarget), decPrec)
-                pcTarget = format(pcTarget, "." + str(decPrec) + "f")
-            else:
-                pcTarget = -1
+            pcTarget = returnPCTargetValueForTargetTable(targetDict, featID, featTarget, decPrec)
 
             aRow[lowerHeaderList.index('conserved')] = targetDict[featID][4]
             aRow[lowerHeaderList.index('total')] = targetDict[featID][5]
@@ -546,3 +580,14 @@ def updateTargetCSVFromTargetDict(setupObject, targetDict):
         targetWriter = csv.writer(out_file)
         for bRow in textRows:
             targetWriter.writerow(bRow)
+
+def returnPCTargetValueForTargetTable(targetDict, featID, featTarget, decPrec):
+    if featTarget > 0:
+        pcTarget = targetDict[featID][4] / featTarget
+        pcTarget *= 100
+        pcTarget = round(float(pcTarget), decPrec)
+        pcTarget = format(pcTarget, "." + str(decPrec) + "f")
+    else:
+        pcTarget = -1
+
+    return pcTarget

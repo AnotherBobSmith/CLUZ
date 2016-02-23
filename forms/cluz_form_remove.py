@@ -2,8 +2,7 @@
 
 # Form implementation generated from reading ui file 'cluz_form_remove.ui'
 #
-# Created: Sun Mar 08 11:02:04 2015
-#      by: PyQt4 UI code generator 4.10.3
+# Created by: PyQt4 UI code generator 4.11.4
 #
 # WARNING! All changes made in this file will be lost!
 
@@ -27,22 +26,24 @@ class Ui_removeDialog(object):
     def setupUi(self, removeDialog):
         removeDialog.setObjectName(_fromUtf8("removeDialog"))
         removeDialog.setWindowModality(QtCore.Qt.ApplicationModal)
-        removeDialog.resize(622, 390)
+        removeDialog.resize(590, 390)
+        removeDialog.setMinimumSize(QtCore.QSize(590, 390))
         self.featLabel = QtGui.QLabel(removeDialog)
-        self.featLabel.setGeometry(QtCore.QRect(150, 20, 401, 16))
+        self.featLabel.setGeometry(QtCore.QRect(120, 20, 461, 16))
+        self.featLabel.setMinimumSize(QtCore.QSize(461, 16))
         self.featLabel.setObjectName(_fromUtf8("featLabel"))
         self.featListWidget = QtGui.QListWidget(removeDialog)
-        self.featListWidget.setGeometry(QtCore.QRect(150, 40, 450, 291))
+        self.featListWidget.setGeometry(QtCore.QRect(120, 40, 450, 290))
         self.featListWidget.setSelectionMode(QtGui.QAbstractItemView.MultiSelection)
         self.featListWidget.setObjectName(_fromUtf8("featListWidget"))
         self.okButton = QtGui.QPushButton(removeDialog)
-        self.okButton.setGeometry(QtCore.QRect(250, 350, 75, 23))
+        self.okButton.setGeometry(QtCore.QRect(220, 350, 75, 23))
         self.okButton.setObjectName(_fromUtf8("okButton"))
         self.cancelButton = QtGui.QPushButton(removeDialog)
-        self.cancelButton.setGeometry(QtCore.QRect(370, 350, 75, 23))
+        self.cancelButton.setGeometry(QtCore.QRect(340, 350, 75, 23))
         self.cancelButton.setObjectName(_fromUtf8("cancelButton"))
         self.logoLabel = QtGui.QLabel(removeDialog)
-        self.logoLabel.setGeometry(QtCore.QRect(0, 20, 131, 351))
+        self.logoLabel.setGeometry(QtCore.QRect(-20, 20, 131, 351))
         self.logoLabel.setText(_fromUtf8(""))
         self.logoLabel.setPixmap(QtGui.QPixmap(_fromUtf8(":/plugins/Cluz/icons/icons/setup_logo.png")))
         self.logoLabel.setObjectName(_fromUtf8("logoLabel"))

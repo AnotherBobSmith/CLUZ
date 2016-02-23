@@ -3,9 +3,9 @@
 /***************************************************************************
                                  A QGIS plugin
  CLUZ for QGIS
-                              -------------------
-        begin                : 18-07-2015
-        copyright            : (C) 2015 by Bob Smith, DICE
+                             -------------------
+        begin                : 2016-23-02
+        copyright            : (C) 2016 by Bob Smith, DICE
         email                : r.j.smith@kent.ac.uk
  ***************************************************************************/
 
@@ -19,38 +19,41 @@
  ***************************************************************************/
 """
 
+
 from PyQt4.QtCore import *
 import qgis
 from qgis.core import *
 from qgis.gui import *
 from qgis.analysis import *
+
 import os
 import csv
 
 import cluz_setup
 
+
 def returnConTotDict(setupObject):
     newConTotDict = {}
-    for aFeat in setupObject.targetDict.keys():
-        newConTotDict[aFeat] = [0, 0]
+    for featID in setupObject.targetDict.keys():
+        newConTotDict[featID] = [0, 0]
 
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     puFeatures = puLayer.getFeatures()
-    puIDField = puLayer.fieldNameIndex('Unit_ID')
-    puStatusField = puLayer.fieldNameIndex('Status')
+    unitIDField = puLayer.fieldNameIndex('Unit_ID')
+    unitStatusField = puLayer.fieldNameIndex('Status')
 
     for puFeature in puFeatures:
         puAttributes = puFeature.attributes()
-        puID = puAttributes[puIDField]
-        puStatus = puAttributes[puStatusField]
+        unitID = puAttributes[unitIDField]
+        unitStatus = puAttributes[unitStatusField]
         try:
-            puAbundDict = setupObject.abundPUKeyDict[puID]
+            puAbundDict = setupObject.abundPUKeyDict[unitID]
             for featID in puAbundDict:
                 featAmount = puAbundDict[featID]
                 oldConAmount = newConTotDict[featID][0]
                 oldTotalAmount = newConTotDict[featID][1]
                 newTotalAmount = oldTotalAmount + featAmount
-                if puStatus == "Earmarked" or puStatus == "Conserved":
+                if unitStatus == "Earmarked" or unitStatus == "Conserved":
                     newConAmount = oldConAmount + featAmount
                 else:
                     newConAmount = oldConAmount
@@ -60,6 +63,7 @@ def returnConTotDict(setupObject):
             pass
 
     return newConTotDict
+
 
 def updateConTotFieldsTargetDict(setupObject, newConTotDict):
     targetDict = setupObject.targetDict
@@ -105,27 +109,21 @@ def makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor):
 
         for outputFeature in outputFeatures:
             outputAttributes = outputFeature.attributes()
-            puID = outputAttributes[outputIDField]
+            unitID = outputAttributes[outputIDField]
             featID = outputAttributes[outputFeatIDField]
             featIDSet.add(featID)
 
             #Produce intersect of lines
             if layerGeomType == 1:
-                outputGeom = outputFeature.geometry()
-                intersectShapeAmount = outputGeom.length()
-                shapeAmount = intersectShapeAmount / convFactor
-                finalShapeAmount = round(shapeAmount, decPrec)
+                finalShapeAmount = calcFeatLineLengthInPU(outputFeature, convFactor, decPrec)
 
             #Produce intersect of polygons
             if layerGeomType == 2:
-                outputGeom = outputFeature.geometry()
-                intersectShapeAmount = outputGeom.area()
-                shapeAmount = intersectShapeAmount / convFactor
-                finalShapeAmount = round(shapeAmount, decPrec)
+                finalShapeAmount = calcFeatPolygonAreaInPU(outputFeature, convFactor, decPrec)
 
             if finalShapeAmount > 0:
                 try:
-                    puAddAbundDict = addAbundDict[puID]
+                    puAddAbundDict = addAbundDict[unitID]
                 except KeyError:
                     puAddAbundDict = {}
                 try:
@@ -134,12 +132,28 @@ def makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor):
                     addAmount = 0
                 addAmount += finalShapeAmount
                 puAddAbundDict[featID] = addAmount
-                addAbundDict[puID] = puAddAbundDict
+                addAbundDict[unitID] = puAddAbundDict
         layerNumber += 1
 
     featIDList = list(featIDSet)
     featIDList.sort()
     return addAbundDict, featIDList
+
+def calcFeatLineLengthInPU(outputFeature, convFactor, decPrec):
+    outputGeom = outputFeature.geometry()
+    intersectShapeAmount = outputGeom.length()
+    shapeAmount = intersectShapeAmount / convFactor
+    finalShapeAmount = round(shapeAmount, decPrec)
+
+    return finalShapeAmount
+
+def calcFeatPolygonAreaInPU(outputFeature, convFactor, decPrec):
+    outputGeom = outputFeature.geometry()
+    intersectShapeAmount = outputGeom.area()
+    shapeAmount = intersectShapeAmount / convFactor
+    finalShapeAmount = round(shapeAmount, decPrec)
+
+    return finalShapeAmount
 
 def makeCsvAddAbundDict(setupObject, csvFilePath, rawUnitIDFieldName, convFactor):
     addAbundDict = {}
@@ -163,28 +177,34 @@ def makeCsvAddAbundDict(setupObject, csvFilePath, rawUnitIDFieldName, convFactor
         warningStatus = "HeaderWithNoID"
 
     if warningStatus == "None":
-        with open(csvFilePath, 'rb') as f:
-            dataDict = csv.DictReader(f)
-            for aDict in dataDict:
-                puID = int(aDict[unitIDFieldName])
-                for aHeader in fileHeaderList:
-                    origAbundValue = float(aDict[aHeader])
-                    abundValue = origAbundValue / convFactor
-                    featID = featHeaderDict[aHeader]
-                    if abundValue > 0:
-                        try:
-                            puAddAbundDict = addAbundDict[puID]
-                        except KeyError:
-                            puAddAbundDict = {}
-                        try:
-                            addAmount = puAddAbundDict[featID]
-                        except KeyError:
-                            addAmount = 0
-                        addAmount += abundValue
-                        puAddAbundDict[featID] = addAmount
-                        addAbundDict[puID] = puAddAbundDict
+        addAbundDict = makeAddAbundDict(csvFilePath, featHeaderDict, fileHeaderList, unitIDFieldName, convFactor)
 
     return addAbundDict, featIDList, warningStatus
+
+def makeAddAbundDict(csvFilePath, featHeaderDict, fileHeaderList, unitIDFieldName, convFactor):
+    addAbundDict = {}
+    with open(csvFilePath, 'rb') as f:
+        dataDict = csv.DictReader(f)
+        for aDict in dataDict:
+            unitID = int(aDict[unitIDFieldName])
+            for aHeader in fileHeaderList:
+                origAbundValue = float(aDict[aHeader])
+                abundValue = origAbundValue / convFactor
+                featID = featHeaderDict[aHeader]
+                if abundValue > 0:
+                    try:
+                        puAddAbundDict = addAbundDict[unitID]
+                    except KeyError:
+                        puAddAbundDict = {}
+                    try:
+                        addAmount = puAddAbundDict[featID]
+                    except KeyError:
+                        addAmount = 0
+                    addAmount += abundValue
+                    puAddAbundDict[featID] = addAmount
+                    addAbundDict[unitID] = puAddAbundDict
+
+    return addAbundDict
 
 def addAbundDictToAbundPUKeyDict(setupObject, addAbundDict):
     abundPUKeyDict = setupObject.abundPUKeyDict
@@ -203,7 +223,7 @@ def addAbundDictToAbundPUKeyDict(setupObject, addAbundDict):
     return abundPUKeyDict
 
 def addFeaturesToPuvspr2File(setupObject, addAbundDict):
-    addPUIDSet = set(addAbundDict.keys())
+    addUnitIDSet = set(addAbundDict.keys())
 
     puvspr2Path = setupObject.inputPath + os.sep + "puvspr2.dat"
     tempPuvspr2Path = cluz_setup.returnTempPathName(puvspr2Path, "dat")
@@ -215,28 +235,28 @@ def addFeaturesToPuvspr2File(setupObject, addAbundDict):
         reader = csv.reader(f)
         reader.next()
         prevUnitID = "AAA" # Used to check whether PU ID is different to previous row in puvspr2.dat
-        puIDAbundList = []
+        unitIDAbundList = []
         for row in reader:
             featID = int(row[0])
-            puID = int(row[1])
+            unitID = int(row[1])
             featAmount = float(row[2])
 
-            if puID != prevUnitID and len(puIDAbundList) != 0:
+            if unitID != prevUnitID and len(unitIDAbundList) != 0:
                 puAddAbundDict = addAbundDict[prevUnitID]
                 for aFeat in puAddAbundDict:
                     aAmount = puAddAbundDict[aFeat]
-                    puIDAbundList.append([aFeat, prevUnitID, aAmount])
-                puIDAbundList.sort()
-                for aList in puIDAbundList:
+                    unitIDAbundList.append([aFeat, prevUnitID, aAmount])
+                unitIDAbundList.sort()
+                for aList in unitIDAbundList:
                     writer.writerow(aList)
-                puIDAbundList = []
+                unitIDAbundList = []
 
-            if puID not in addPUIDSet:
+            if unitID not in addUnitIDSet:
                 writer.writerow(row)
             else:
-                puIDAbundList.append([featID, puID, featAmount])
+                unitIDAbundList.append([featID, unitID, featAmount])
 
-            prevUnitID = puID
+            prevUnitID = unitID
 
     tempPuvspr2File.close()
     os.remove(puvspr2Path)
@@ -253,21 +273,21 @@ def addFeaturesToTargetCsvFile(setupObject, addAbundDict, featIDList):
 
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     puFeatures = puLayer.getFeatures()
-    puIDField = puLayer.fieldNameIndex('Unit_ID')
-    puStatusField = puLayer.fieldNameIndex('Status')
+    unitIDField = puLayer.fieldNameIndex('Unit_ID')
+    unitStatusField = puLayer.fieldNameIndex('Status')
 
     for puFeature in puFeatures:
         puAttributes = puFeature.attributes()
-        puID = puAttributes[puIDField]
-        puStatus = puAttributes[puStatusField]
+        unitID = puAttributes[unitIDField]
+        unitStatus = puAttributes[unitStatusField]
 
         for bFeatID in featIDList:
             try:
-                puAddAbundDict = addAbundDict[puID]
+                puAddAbundDict = addAbundDict[unitID]
                 featAmount = puAddAbundDict[bFeatID]
                 featCon, featTotal = addTargetDict[bFeatID]
                 featTotal += featAmount
-                if puStatus == "Conserved" or puStatus == "Earmarked":
+                if unitStatus == "Conserved" or unitStatus == "Earmarked":
                     featCon += featAmount
                 addTargetDict[bFeatID] = (featCon, featTotal)
             except KeyError:
@@ -331,7 +351,6 @@ def remFeaturesFromTargetCsv_Dict(setupObject, selectedFeatIDSet):
     os.rename(tempTargetPath, setupObject.targetPath)
 
 def makeBlankCLUZFiles(shapePath, convFactor, costAsAreaBool, inputPath, targetPath):
-
     targetWriter = csv.writer(open(targetPath, "wb"))
     targetWriter.writerow(["Id", "Name", "Type", "Target", "Spf", "Conserved", "Total", "PC_target"])
 
@@ -343,22 +362,22 @@ def makeBlankCLUZFiles(shapePath, convFactor, costAsAreaBool, inputPath, targetP
 
     puLayer = QgsVectorLayer(shapePath, "Shapefile", "ogr")
     puProvider = puLayer.dataProvider()
-    puIdField = puProvider.addAttributes([QgsField("Unit_ID", QVariant.Int)])
+    unitIDField = puProvider.addAttributes([QgsField("Unit_ID", QVariant.Int)])
     puAreaField = puProvider.addAttributes([QgsField("Area", QVariant.Double, "real", 10, 2)])
     puCostField = puProvider.addAttributes([QgsField("Cost", QVariant.Double, "real", 10, 2)])
-    puStatusField = puProvider.addAttributes([QgsField("Status", QVariant.String)])
+    unitStatusField = puProvider.addAttributes([QgsField("Status", QVariant.String)])
     puLayer.updateFields()
 
-    puIdFieldOrder = puProvider.fieldNameIndex("Unit_ID")
+    unitIDFieldOrder = puProvider.fieldNameIndex("Unit_ID")
     puAreaFieldOrder = puProvider.fieldNameIndex("Area")
     puCostFieldOrder = puProvider.fieldNameIndex("Cost")
-    puStatusFieldOrder = puProvider.fieldNameIndex("Status")
+    unitStatusFieldOrder = puProvider.fieldNameIndex("Status")
 
     puLayer.startEditing()
     puFeatures = puLayer.getFeatures()
     for puFeature in puFeatures:
         puRow = puFeature.id()
-        puIDValue = puRow + 1
+        unitIDValue = puRow + 1
         puGeom = puFeature.geometry()
         puArea = puGeom.area()
         finalPUArea = puArea / convFactor
@@ -367,10 +386,10 @@ def makeBlankCLUZFiles(shapePath, convFactor, costAsAreaBool, inputPath, targetP
         else:
             puCost = 0
 
-        puLayer.changeAttributeValue(puRow, puIdFieldOrder, puIDValue, True)
+        puLayer.changeAttributeValue(puRow, unitIDFieldOrder, unitIDValue, True)
         puLayer.changeAttributeValue(puRow, puCostFieldOrder, puCost, True)
         puLayer.changeAttributeValue(puRow, puAreaFieldOrder, finalPUArea, True)
-        puLayer.changeAttributeValue(puRow, puStatusFieldOrder, "Available", True)
+        puLayer.changeAttributeValue(puRow, unitStatusFieldOrder, "Available", True)
 
     puLayer.commitChanges()
 
@@ -384,30 +403,9 @@ def troubleShootCLUZFiles(setupObject):
     progressMessage = "Comparing the files..."
     qgis.utils.iface.mainWindow().statusBar().showMessage(progressMessage)
     idValuesNotDuplicated = True
-    extraTargetFeatIDset, extraAbundFeatIDset = findValuesInOneSet(targetFeatIDSet, puvspr2FeatIDSet)
-    if len(extraTargetFeatIDset) > 0:
-        errorText = ""
-        for aValue in extraTargetFeatIDset:
-            errorText += str(aValue) + ", "
-        errorText = errorText[: -2]
-        qgis.utils.iface.messageBar().pushMessage("Abundance and Target tables: ", "The following Feature IDs appear in the Target Table but not in the puvspr2.dat file: " + errorText, QgsMessageBar.WARNING)
-        idValuesNotDuplicated = False
-    if len(extraAbundFeatIDset) > 0:
-        errorText = ""
-        for aValue in extraAbundFeatIDset:
-            errorText += str(aValue) + ", "
-        errorText = errorText[: -2]
-        qgis.utils.iface.messageBar().pushMessage("puvspr2.dat file and Target tables: ", "The following Feature IDs appear in the puvspr2.dat file but not in the Target table: " + errorText, QgsMessageBar.WARNING)
-        idValuesNotDuplicated = False
 
-    extraPuvspr2PuIDSet, extraPUPuIDSet = findValuesInOneSet(puvspr2PuIDSet, puPuIDSet)
-    if len(extraPuvspr2PuIDSet) > 0:
-        errorText = ""
-        for aValue in extraPuvspr2PuIDSet:
-            errorText += str(aValue) + ", "
-        errorText = errorText[: -2]
-        qgis.utils.iface.messageBar().pushMessage("puvspr2.dat file and Planning unit layer: ", "The following planning unit IDs appear in the puvspr2.dat file but not in the planning unit layer: " + errorText, QgsMessageBar.WARNING)
-        idValuesNotDuplicated = False
+    idValuesNotDuplicated = checkIDsMatchInTargetTableAndPuvspr2(targetFeatIDSet, puvspr2FeatIDSet, idValuesNotDuplicated)
+    idValuesNotDuplicated = checkIDsMatchInPULayerAndPuvspr2(puvspr2PuIDSet, puPuIDSet, idValuesNotDuplicated)
 
     abundDatFilesSame = True
     if puvspr2PuIDSet != sporderPuIDSet or puvspr2FeatIDSet != sporderFeatIDSet or puvspr2RowNum != sporderRowNum or puvspr2RecCountDict != sporderRecCountDict:
@@ -424,6 +422,39 @@ def troubleShootCLUZFiles(setupObject):
     progressMessage = "CLUZ Troubleshoot files completed"
     qgis.utils.iface.mainWindow().statusBar().showMessage(progressMessage)
 
+def checkIDsMatchInTargetTableAndPuvspr2(targetFeatIDSet, puvspr2FeatIDSet, idValuesNotDuplicated):
+    extraTargetFeatIDset, extraAbundFeatIDset = findValuesInOneSet(targetFeatIDSet, puvspr2FeatIDSet)
+
+    if len(extraTargetFeatIDset) > 0:
+        errorText = ""
+        for aValue in extraTargetFeatIDset:
+            errorText += str(aValue) + ", "
+        errorText = errorText[: -2]
+        qgis.utils.iface.messageBar().pushMessage("Abundance and Target tables: ", "The following Feature IDs appear in the Target Table but not in the puvspr2.dat file: " + errorText, QgsMessageBar.WARNING)
+        idValuesNotDuplicated = False
+    if len(extraAbundFeatIDset) > 0:
+        errorText = ""
+        for aValue in extraAbundFeatIDset:
+            errorText += str(aValue) + ", "
+        errorText = errorText[: -2]
+        qgis.utils.iface.messageBar().pushMessage("puvspr2.dat file and Target tables: ", "The following Feature IDs appear in the puvspr2.dat file but not in the Target table: " + errorText, QgsMessageBar.WARNING)
+        idValuesNotDuplicated = False
+
+    return idValuesNotDuplicated
+
+def checkIDsMatchInPULayerAndPuvspr2(puvspr2PuIDSet, puPuIDSet, idValuesNotDuplicated):
+    extraPuvspr2PuIDSet, extraPUPuIDSet = findValuesInOneSet(puvspr2PuIDSet, puPuIDSet)
+    if len(extraPuvspr2PuIDSet) > 0:
+        errorText = ""
+        for aValue in extraPuvspr2PuIDSet:
+            errorText += str(aValue) + ", "
+        errorText = errorText[: -2]
+        qgis.utils.iface.messageBar().pushMessage("puvspr2.dat file and Planning unit layer: ", "The following planning unit IDs appear in the puvspr2.dat file but not in the planning unit layer: " + errorText, QgsMessageBar.WARNING)
+        idValuesNotDuplicated = False
+
+    return idValuesNotDuplicated
+
+
 def findValuesInOneSet(inputSet1, inputSet2):
     set1 = set()
     set2 = set()
@@ -438,7 +469,6 @@ def findValuesInOneSet(inputSet1, inputSet2):
 
 def checkTargetCsvFile(setupObject):
     targetCSVFilePath = setupObject.targetPath
-    errorSet = set()
     featIDList = []
     progressMessage = "Checking the target table..."
     qgis.utils.iface.mainWindow().statusBar().showMessage(progressMessage)
@@ -451,93 +481,159 @@ def checkTargetCsvFile(setupObject):
         for aHeader in origHeaderList:
             headerList.append(aHeader.lower())
 
+        errorSet = set()
         for aRow in targetReader:
-            featID = aRow[headerList.index('id')]
-            featName = aRow[headerList.index('name')]
-            featType = aRow[headerList.index('type')]
-            featSpf = aRow[headerList.index('spf')]
-            featTarget = aRow[headerList.index('target')]
-            featConserved = aRow[headerList.index('conserved')]
-            featTotal = aRow[headerList.index('total')]
-            featPc_Target = aRow[headerList.index('pc_target')]
+            featIDString = aRow[headerList.index('id')]
+            featNameString = aRow[headerList.index('name')]
+            featTypeString = aRow[headerList.index('type')]
+            featSpfString = aRow[headerList.index('spf')]
+            featTargetString = aRow[headerList.index('target')]
+            featConservedString = aRow[headerList.index('conserved')]
+            featTotalString = aRow[headerList.index('total')]
+            featPc_TargetString = aRow[headerList.index('pc_target')]
 
-            if featID == "":
-                errorSet.add("featIDBlank")
-            else:
-                try:
-                    int(featID)
-                    featIDList.append(int(featID))
-                except ValueError:
-                    errorSet.add("featIDNotInt")
-            if featName == "":
-                errorSet.add("featNameBlank")
-            if " " in featName and any(i.isdigit() for i in featName):
-                errorSet.add("featNameWrongFormat")
-            if featType == "":
-                errorSet.add("featTypeBlank")
-            else:
-                try:
-                    int(featType)
-                except ValueError:
-                    errorSet.add("featTypeNotFloat")
-            if featSpf == "":
-                errorSet.add("featSpfBlank")
-            else:
-                try:
-                    float(featSpf)
-                except ValueError:
-                    errorSet.add("featSpfNotFloat")
-            if featTarget == "":
-                errorSet.add("featTargetBlank")
-            else:
-                try:
-                    float(featTarget)
-                except ValueError:
-                    errorSet.add("featTargetNotFloat")
-            if featConserved == "":
-                errorSet.add("featConservedBlank")
-            else:
-                try:
-                    float(featConserved)
-                except ValueError:
-                    errorSet.add("featConservedNotFloat")
-            if featTotal == "":
-                errorSet.add("featTotalBlank")
-            else:
-                try:
-                    float(featTotal)
-                except ValueError:
-                    errorSet.add("featTotalNotFloat")
-            if featPc_Target == "":
-                errorSet.add("featPc_TargetBlank")
-            else:
-                try:
-                    float(featPc_Target)
-                except ValueError:
-                    errorSet.add("featPc_TargetNotFloat")
+            featIDList, errorSet = checkFeatIDString(featIDList, featIDString, errorSet)
+            errorSet = checkFeatNameString(featNameString, errorSet)
+            errorSet = checkFeatTypeString(featTypeString, errorSet)
+            errorSet = checkFeatSpfString(featSpfString, errorSet)
+            errorSet = checkFeatTargetString(featTargetString, errorSet)
+            errorSet = checkFeatConservedString(featConservedString, errorSet)
+            errorSet = checkFeatTotalString(featTotalString, errorSet)
+            errorSet = checkFeatPc_TargetString(featPc_TargetString, errorSet)
 
+        errorSet = checkForDuplicateFeatIDs(featIDList, errorSet)
+
+    pushTargetTableErrorMessages(errorSet)
+
+    if len(errorSet) == 0:
+        fileFine = True
+    else:
+        fileFine = False
+
+    return fileFine, set(featIDList)
+
+def checkFeatIDString(featIDList, featIDString, errorSet):
+    if featIDString == "":
+        errorSet.add("featIDBlank")
+    else:
+        try:
+            featIDList.append(int(featIDString))
+            if int(featIDString) < 0:
+                errorSet.add("featIDNotInt")
+        except ValueError:
+            errorSet.add("featIDNotInt")
+
+    return featIDList, errorSet
+
+def checkFeatNameString(featNameString, errorSet):
+    if featNameString == "":
+        errorSet.add("featNameBlank")
+    elif " " in featNameString or any(i.isdigit() for i in featNameString):
+        errorSet.add("featNameWrongFormat")
+
+    return errorSet
+
+
+def checkFeatTypeString(featTypeString, errorSet):
+    if featTypeString == "":
+        errorSet.add("featTypeBlank")
+    else:
+        try:
+            int(featTypeString)
+            if int(featTypeString) < 0:
+                errorSet.add("featSpfNotFloat")
+        except ValueError:
+            errorSet.add("featTypeNotFloat")
+
+    return errorSet
+
+def checkFeatSpfString(featSpfString, errorSet):
+    if featSpfString == "":
+        errorSet.add("featSpfBlank")
+    else:
+        try:
+            float(featSpfString)
+            if float(featSpfString) < 0:
+                errorSet.add("featSpfNotFloat")
+        except ValueError:
+            errorSet.add("featSpfNotFloat")
+
+    return errorSet
+
+def checkFeatTargetString(featTargetString, errorSet):
+    if featTargetString == "":
+        errorSet.add("featTargetBlank")
+    else:
+        try:
+            float(featTargetString)
+            if float(featTargetString) < 0:
+                errorSet.add("featTargetNotFloat")
+        except ValueError:
+            errorSet.add("featTargetNotFloat")
+
+    return errorSet
+
+def checkFeatConservedString(featConservedString, errorSet):
+    if featConservedString == "":
+        errorSet.add("featConservedBlank")
+    else:
+        try:
+            float(featConservedString)
+        except ValueError:
+            errorSet.add("featConservedNotFloat")
+
+    return errorSet
+
+
+def checkFeatTotalString(featTotalString, errorSet):
+    if featTotalString == "":
+        errorSet.add("featTotalNotFloat")
+    else:
+        try:
+            float(featTotalString)
+        except ValueError:
+            errorSet.add("featTotalBlank")
+
+    return errorSet
+
+
+def checkFeatPc_TargetString(featPc_TargetString, errorSet):
+    if featPc_TargetString == "":
+        errorSet.add("featPc_TargetBlank")
+    else:
+        try:
+            float(featPc_TargetString)
+        except ValueError:
+            errorSet.add("featPc_TargetNotFloat")
+
+    return errorSet
+
+def checkForDuplicateFeatIDs(featIDList, errorSet):
     if len(featIDList) != len(set(featIDList)):
         errorSet.add("duplicateFeatID")
 
+    return errorSet
+
+def pushTargetTableErrorMessages(errorSet):
     for anError in errorSet:
         if anError == "featIDBlank":
             qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the Feature ID values is blank.", QgsMessageBar.WARNING)
         if anError == "featIDNotInt":
-            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the Feature ID values is not an integer.", QgsMessageBar.WARNING)
+            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the Feature ID values is not a positive integer.", QgsMessageBar.WARNING)
         if anError == "featNameBlank":
             qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the name values is blank.", QgsMessageBar.WARNING)
         if anError == "featTypeBlank":
             qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the type values is blank.", QgsMessageBar.WARNING)
         if anError == "featTypeNotInt":
-            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the type values is not an integer.", QgsMessageBar.WARNING)
+            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the type values is not a positve integer.", QgsMessageBar.WARNING)
         if anError == "featSpfBlank":
             qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the SPF values is blank.", QgsMessageBar.WARNING)
         if anError == "featSpfNotFloat":
-            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the SPF values is not a number.", QgsMessageBar.WARNING)
+            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the SPF values is not a positive number.", QgsMessageBar.WARNING)
         if anError == "featTargetBlank":
             qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the target values is blank.", QgsMessageBar.WARNING)
         if anError == "featTargetNotFloat":
-            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the target values is not a number.", QgsMessageBar.WARNING)
+            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the target values is not a non-negative number.", QgsMessageBar.WARNING)
         if anError == "featConservedBlank":
             qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the conserved values is blank.", QgsMessageBar.WARNING)
         if anError == "featConservedNotFloat":
@@ -554,24 +650,17 @@ def checkTargetCsvFile(setupObject):
         if anError == "duplicateFeatID":
             qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the Feature IDs appears twice in the Feature ID field.", QgsMessageBar.WARNING)
         if anError == "featNameWrongFormat":
-            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the Feature names is in the wrong format. They cannot contain spaces and numbers.", QgsMessageBar.WARNING)
-
-    if len(errorSet) == 0:
-        fileFine = True
-    else:
-        fileFine = False
-
-    return fileFine, set(featIDList)
+            qgis.utils.iface.messageBar().pushMessage("Target Table: ", "At least one of the Feature names is in the wrong format. They cannot contain spaces or numbers.", QgsMessageBar.WARNING)
 
 def checkPuvspr2DatFile(setupObject):
     puvspr2FilePath = setupObject.inputPath + os.sep + "puvspr2.dat"
     recCountDict = {} #Used to check whether there are the same number of records per feature in puvspr2.dat and sporder.dat files
     errorSet = set()
-    puIDSet = set()
+    unitIDSet = set()
     featIDSet = set()
 
     errorRowSet = set()
-    prevPUID = -99
+    prevUnitID = -99
     recordCount = 0
     progressCount = 0
 
@@ -593,10 +682,10 @@ def checkPuvspr2DatFile(setupObject):
                 errorRowSet.add(rowNum)
 
             featID = aRow[0]
-            puID = aRow[1]
+            unitID = aRow[1]
             featAmount = aRow[2]
 
-            if int(puID) < int(prevPUID):
+            if int(unitID) < int(prevUnitID):
                 errorSet.add("notOrderedByPU")
                 errorRowSet.add(rowNum)
 
@@ -619,13 +708,13 @@ def checkPuvspr2DatFile(setupObject):
                 except ValueError:
                     errorSet.add("featIDNotInt")
                     errorRowSet.add(rowNum)
-            if puID == "":
+            if unitID == "":
                 errorSet.add("puIDBlank")
                 errorRowSet.add(rowNum)
             try:
-                int(puID)
-                puIDSet.add(int(puID))
-                if int(puID) < 1:
+                int(unitID)
+                unitIDSet.add(int(unitID))
+                if int(unitID) < 1:
                     errorSet.add("puIDNeg")
                     errorRowSet.add(rowNum)
             except ValueError:
@@ -643,7 +732,7 @@ def checkPuvspr2DatFile(setupObject):
                 errorSet.add("featAmountNotFloat")
                 errorRowSet.add(rowNum)
             rowNum += 1
-            prevPUID = puID
+            prevunitID = unitID
 
     if len(errorRowSet) > 0:
         errorRowList = list(errorRowSet)
@@ -683,13 +772,13 @@ def checkPuvspr2DatFile(setupObject):
     else:
         fileFine = False
 
-    return fileFine, puIDSet, featIDSet, rowNum, recCountDict
+    return fileFine, unitIDSet, featIDSet, rowNum, recCountDict
 
 def checkSporderDatFile(setupObject):
     sporderFilePath = setupObject.inputPath + os.sep + "sporder.dat"
     recCountDict = {} #Used to check whether there are the same number of records per feature in puvspr2.dat and sporder.dat files
     errorSet = set()
-    puIDSet = set()
+    unitIDSet = set()
     featIDSet = set()
 
     errorRowSet = set()
@@ -714,7 +803,7 @@ def checkSporderDatFile(setupObject):
                 errorRowSet.add(rowNum)
 
             featID = aRow[0]
-            puID = aRow[1]
+            unitID = aRow[1]
             featAmount = aRow[2]
 
             if int(featID) < int(prevFeatID):
@@ -740,13 +829,13 @@ def checkSporderDatFile(setupObject):
                 except ValueError:
                     errorSet.add("featIDNotInt")
                     errorRowSet.add(rowNum)
-            if puID == "":
+            if unitID == "":
                 errorSet.add("puIDBlank")
                 errorRowSet.add(rowNum)
             try:
-                int(puID)
-                puIDSet.add(int(puID))
-                if int(puID) < 1:
+                int(unitID)
+                unitIDSet.add(int(unitID))
+                if int(unitID) < 1:
                     errorSet.add("puIDNeg")
                     errorRowSet.add(rowNum)
             except ValueError:
@@ -804,22 +893,22 @@ def checkSporderDatFile(setupObject):
     else:
         fileFine = False
 
-    return fileFine, puIDSet, featIDSet, rowNum, recCountDict
+    return fileFine, unitIDSet, featIDSet, rowNum, recCountDict
 
 
 ####################################################################http://www.opengis.ch/2015/04/29/performance-for-mass-updating-features-on-layers/
 def checkPuShapeFile(setupObject):
-    puIDList = []
+    unitIDList = []
     errorSet = set()
     statusList = ["Available", "Conserved", "Earmarked", "Excluded"]
-    puIDErrorDuplText = ""
+    unitIDErrorDuplText = ""
 
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     puFeatures = puLayer.getFeatures()
-    puIDField = puLayer.fieldNameIndex('Unit_ID')
+    unitIDField = puLayer.fieldNameIndex('Unit_ID')
     puAreaField = puLayer.fieldNameIndex('Area')
     puCostField = puLayer.fieldNameIndex('Cost')
-    puStatusField = puLayer.fieldNameIndex('Status')
+    unitStatusField = puLayer.fieldNameIndex('Status')
 
     recordCount = 0
     progressCount = 0
@@ -837,17 +926,17 @@ def checkPuShapeFile(setupObject):
 
         puAttributes = puFeature.attributes()
 
-        puID = puAttributes[puIDField]
-        if puID == NULL:#NULL is used for blank values that return QPyNullVariant
+        unitID = puAttributes[unitIDField]
+        if unitID == NULL:#NULL is used for blank values that return QPyNullVariant
             errorSet.add("puIDBlank")
         else:
             try:
-                int(puID)
-                puIDList.append(puID)
-                if puIDList.count(puID) > 1:
-                    puIDErrorDuplText += str(puID) + ", "
+                int(unitID)
+                unitIDList.append(unitID)
+                if unitIDList.count(unitID) > 1:
+                    unitIDErrorDuplText += str(unitID) + ", "
                     errorSet.add("duplicatePuID")
-                if int(puID) < 0:
+                if int(unitID) < 0:
                     errorSet.add("puIDNotInt")
             except ValueError:
                 errorSet.add("puIDNotInt")
@@ -874,17 +963,17 @@ def checkPuShapeFile(setupObject):
             except ValueError:
                 errorSet.add("puCostNotFloat")
 
-        puStatus = puAttributes[puStatusField]
-        if not puStatus in statusList:
+        unitStatus = puAttributes[unitStatusField]
+        if not unitStatus in statusList:
             errorSet.add("puStatusWrong")
 
-    puIDErrorDuplMessage = puIDErrorDuplText[: -2]
+    unitIDErrorDuplMessage = unitIDErrorDuplText[: -2]
 
     for anError in errorSet:
         if anError == "puIDBlank":
             qgis.utils.iface.messageBar().pushMessage("Planning unit layer: ", "At least one of the planning unit ID values is blank.", QgsMessageBar.WARNING)
         if anError == "duplicateFeatID":
-            qgis.utils.iface.messageBar().pushMessage("Abundance Table: ", "The following planning unit ID values appear more than once in the Unit_ID field: " + puIDErrorDuplMessage, QgsMessageBar.WARNING)
+            qgis.utils.iface.messageBar().pushMessage("Abundance Table: ", "The following planning unit ID values appear more than once in the Unit_ID field: " + unitIDErrorDuplMessage, QgsMessageBar.WARNING)
         if anError == "puIDNotInt":
             qgis.utils.iface.messageBar().pushMessage("Planning unit layer: ", "At least one of the planning unit ID values is not an integer greater than 0.", QgsMessageBar.WARNING)
         if anError == "puAreaBlank":
@@ -905,4 +994,4 @@ def checkPuShapeFile(setupObject):
     else:
         fileFine = False
 
-    return fileFine, set(puIDList)
+    return fileFine, set(unitIDList)

@@ -3,9 +3,9 @@
 /***************************************************************************
                                  A QGIS plugin
  CLUZ for QGIS
-                              -------------------
-        begin                : 18-07-2015
-        copyright            : (C) 2015 by Bob Smith, DICE
+                             -------------------
+        begin                : 2016-23-02
+        copyright            : (C) 2016 by Bob Smith, DICE
         email                : r.j.smith@kent.ac.uk
  ***************************************************************************/
 
@@ -46,8 +46,10 @@ class targetDialog(QDialog, Ui_targetDialog):
         QDialog.__init__(self)
         self.iface = iface
         self.setupUi(self)
-        setupObject.targetDict = cluz_setup.makeTargetDict(setupObject)
-        self.loadTargetDictData(setupObject)
+        targetDict = cluz_setup.makeTargetDict(setupObject)
+        if targetDict != "blank":
+            setupObject.targetDict = targetDict
+            self.loadTargetDictData(setupObject)
 
     def loadTargetDictData(self, setupObject):
         decPrec = setupObject.decimalPlaces
@@ -82,23 +84,7 @@ class targetDialog(QDialog, Ui_targetDialog):
                     pcValueUpdate = True
                 aRow[lowerHeaderList.index("pc_target")] = limboPCValue
 
-                self.targetTableWidget.insertRow(insertRowNumber)
-                for aColValue in range(len(targetHeaderList)):
-                    headerName = targetHeaderList[aColValue].lower()
-                    featValue = aRow[aColValue]
-                    if headerName in decPrecHeaderNameList:
-                        featValue = round(float(featValue), decPrec)
-                        featValue = format(featValue, "." + str(decPrec) + "f")
-                    targTableItem = QTableWidgetItem(str(featValue))
-                    if headerName == "pc_target" and str(featValue) == "-1":
-                        targTableItem.setTextColor(QColor.fromRgb(128, 128, 128))
-                    elif headerName == "pc_target" and float(featValue) >= 0:
-                        if float(featValue) < 100:
-                            targTableItem.setTextColor(QColor.fromRgb(255, 0, 0))
-                        elif float(featValue) >= 100:
-                            targTableItem.setTextColor(QColor.fromRgb(0, 102, 51))
-                    self.targetTableWidget.setItem(insertRowNumber, aColValue, targTableItem)
-
+                addTargetTableRow(self, aRow, targetHeaderList, decPrecHeaderNameList, insertRowNumber, decPrec)
                 insertRowNumber += 1
 
             self.targetTableWidget.setHorizontalHeaderLabels(targetHeaderList)
@@ -109,6 +95,27 @@ class targetDialog(QDialog, Ui_targetDialog):
         if pcValueUpdate == True:
             cluz_setup.updateTargetCSVFromTargetDict(setupObject, setupObject.targetDict)
 
+def addTargetTableRow(self, aRow, targetHeaderList, decPrecHeaderNameList, insertRowNumber, decPrec):
+    self.targetTableWidget.insertRow(insertRowNumber)
+    for aColValue in range(len(targetHeaderList)):
+        headerName = targetHeaderList[aColValue].lower()
+        tableValue = aRow[aColValue]
+        if headerName in decPrecHeaderNameList:
+            tableValue = round(float(tableValue), decPrec)
+            tableValue = format(tableValue, "." + str(decPrec) + "f")
+        targTableItem = QTableWidgetItem(str(tableValue))
+        if headerName == "target":
+            targetValue = tableValue
+        elif headerName == "conserved":
+            conservedValue = tableValue
+        if headerName == "pc_target" and str(tableValue) == "-1":
+            targTableItem.setTextColor(QColor.fromRgb(128, 128, 128))
+        elif headerName == "pc_target" and float(tableValue) >= 0:
+            if float(conservedValue) < float(targetValue):
+                targTableItem.setTextColor(QColor.fromRgb(255, 0, 0))
+            else:
+                targTableItem.setTextColor(QColor.fromRgb(0, 102, 51))
+        self.targetTableWidget.setItem(insertRowNumber, aColValue, targTableItem)
 
 class abundSelectDialog(QDialog, Ui_abundSelectDialog):
     def __init__(self, iface, setupObject):
@@ -341,13 +348,6 @@ class identifyDialog(QDialog, Ui_identifyDialog):
         for aColValue in range(len(headerList)):
             self.identifyTableWidget.resizeColumnToContents(aColValue)
 
-
-    # def copyIdentDictToClipboard(self, identDict):
-    #     r = Tkinter.Tk()
-    #     r.withdraw()
-    #     r.clipboard_clear()
-    #     r.clipboard_append('i can has clipboardz?')
-    #     r.destroy()
 
 class metDialog(QDialog, Ui_metDialog):
     def __init__(self, iface, setupObject):

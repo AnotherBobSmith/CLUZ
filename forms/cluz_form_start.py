@@ -2,8 +2,7 @@
 
 # Form implementation generated from reading ui file 'cluz_form_start.ui'
 #
-# Created: Sun Mar 08 10:51:50 2015
-#      by: PyQt4 UI code generator 4.10.3
+# Created by: PyQt4 UI code generator 4.11.4
 #
 # WARNING! All changes made in this file will be lost!
 
@@ -27,7 +26,8 @@ class Ui_startDialog(object):
     def setupUi(self, startDialog):
         startDialog.setObjectName(_fromUtf8("startDialog"))
         startDialog.setWindowModality(QtCore.Qt.ApplicationModal)
-        startDialog.resize(320, 253)
+        startDialog.resize(320, 250)
+        startDialog.setMinimumSize(QtCore.QSize(320, 250))
         self.okButton = QtGui.QPushButton(startDialog)
         self.okButton.setGeometry(QtCore.QRect(70, 210, 75, 23))
         self.okButton.setObjectName(_fromUtf8("okButton"))
@@ -35,19 +35,22 @@ class Ui_startDialog(object):
         self.cancelButton.setGeometry(QtCore.QRect(200, 210, 75, 23))
         self.cancelButton.setObjectName(_fromUtf8("cancelButton"))
         self.openRadioButton = QtGui.QRadioButton(startDialog)
-        self.openRadioButton.setGeometry(QtCore.QRect(80, 120, 221, 17))
+        self.openRadioButton.setGeometry(QtCore.QRect(80, 120, 211, 17))
+        self.openRadioButton.setMinimumSize(QtCore.QSize(211, 17))
         self.openRadioButton.setChecked(True)
         self.openRadioButton.setObjectName(_fromUtf8("openRadioButton"))
         self.startButtonGroup = QtGui.QButtonGroup(startDialog)
         self.startButtonGroup.setObjectName(_fromUtf8("startButtonGroup"))
         self.startButtonGroup.addButton(self.openRadioButton)
         self.createButton = QtGui.QRadioButton(startDialog)
-        self.createButton.setGeometry(QtCore.QRect(80, 150, 141, 17))
+        self.createButton.setGeometry(QtCore.QRect(80, 150, 211, 17))
+        self.createButton.setMinimumSize(QtCore.QSize(211, 17))
         self.createButton.setCheckable(True)
         self.createButton.setObjectName(_fromUtf8("createButton"))
         self.startButtonGroup.addButton(self.createButton)
         self.instructionsLabel = QtGui.QLabel(startDialog)
-        self.instructionsLabel.setGeometry(QtCore.QRect(80, 10, 231, 71))
+        self.instructionsLabel.setGeometry(QtCore.QRect(80, 10, 230, 91))
+        self.instructionsLabel.setMinimumSize(QtCore.QSize(230, 91))
         self.instructionsLabel.setObjectName(_fromUtf8("instructionsLabel"))
         self.graphicLabel = QtGui.QLabel(startDialog)
         self.graphicLabel.setGeometry(QtCore.QRect(10, 20, 51, 51))
@@ -64,8 +67,9 @@ class Ui_startDialog(object):
         self.cancelButton.setText(_translate("startDialog", "Cancel", None))
         self.openRadioButton.setText(_translate("startDialog", "Open existing setup file", None))
         self.createButton.setText(_translate("startDialog", "Create new setup file", None))
-        self.instructionsLabel.setText(_translate("startDialog", "The selected action cannot continue because\n"
-"a CLUZ setup file has not been specified.\n"
+        self.instructionsLabel.setText(_translate("startDialog", "The selected action cannot continue\n"
+" because a CLUZ setup file has not\n"
+" been specified.\n"
 "\n"
 "Please open an existing setup file or\n"
 "create a new one.", None))

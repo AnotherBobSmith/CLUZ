@@ -3,9 +3,9 @@
 /***************************************************************************
                                  A QGIS plugin
  CLUZ for QGIS
-                              -------------------
-        begin                : 18-07-2015
-        copyright            : (C) 2015 by Bob Smith, DICE
+                             -------------------
+        begin                : 2016-23-02
+        copyright            : (C) 2016 by Bob Smith, DICE
         email                : r.j.smith@kent.ac.uk
  ***************************************************************************/
 
@@ -23,7 +23,6 @@ from PyQt4.QtCore import *
 import qgis
 from qgis.core import *
 from qgis.gui import *
-from PyQt4.QtGui import *
 
 import os
 import csv
@@ -67,139 +66,130 @@ def createPuDatFile(setupObject):
     puStatusField = puLayer.fieldNameIndex('Status')
 
     for puFeature in puFeatures:
-        puAttributes = puFeature.attributes()
-        puID = puAttributes[puIDField]
-        puCost = puAttributes[puCostField]
-        puStatus = puAttributes[puStatusField]
-        puStatusCode = puStatusDict[puStatus]
+        puDatRowList = makePUDatRowList(puFeature, puStatusDict, puIDField, puCostField, puStatusField, decPrec)
+        puDatWriter.writerow(puDatRowList)
 
-        puCentroid = puFeature.geometry().centroid()
-        rawXCoord = puCentroid.asPoint().x()
-        xCoord = round(float(rawXCoord), decPrec)
-        xCoord = format(xCoord, "." + str(decPrec) + "f")
+def makePUDatRowList(puFeature, puStatusDict, puIDField, puCostField, puStatusField, decPrec):
+    puAttributes = puFeature.attributes()
+    puID = puAttributes[puIDField]
+    puCost = puAttributes[puCostField]
+    puStatus = puAttributes[puStatusField]
+    puStatusCode = puStatusDict[puStatus]
 
-        rawYCoord = puCentroid.asPoint().y()
-        yCoord = round(float(rawYCoord), decPrec)
-        yCoord = format(yCoord, "." + str(decPrec) + "f")
+    puCentroid = puFeature.geometry().centroid()
+    rawXCoord = puCentroid.asPoint().x()
+    xCoord = round(float(rawXCoord), decPrec)
+    xCoord = format(xCoord, "." + str(decPrec) + "f")
 
-        puDatWriter.writerow([puID, puCost, puStatusCode, xCoord, yCoord])
+    rawYCoord = puCentroid.asPoint().y()
+    yCoord = round(float(rawYCoord), decPrec)
+    yCoord = format(yCoord, "." + str(decPrec) + "f")
+
+    puDatRowList = [puID, puCost, puStatusCode, xCoord, yCoord]
+
+    return puDatRowList
+
 
 def createBoundDatFile(setupObject, extEdgeBool):
-
-# ################################################################################
-# Initial part of script adapted from http://www.qgistutorials.com/en/_downloads/neighbors.py
-# # Copyright 2014 Ujaval Gandhi
-# #
-# #This program is free software; you can redistribute it and/or
-# #modify it under the terms of the GNU General Public License
-# #as published by the Free Software Foundation; either version 2
-# #of the License, or (at your option) any later version.
-
-# ################################################################################
-
-    decPrec = setupObject.decimalPlaces
-
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
-    provider = puLayer.dataProvider()
-    unitIDFieldOrder = provider.fieldNameIndex("Unit_ID")
+    unitIDFieldIndex = puLayer.dataProvider().fieldNameIndex("Unit_ID")
     boundResultsDict = {}
+    puPolygonDict = {}
+    puIDGeomDict = {}
+    spatialIndex = QgsSpatialIndex()
+    for aPolygon in puLayer.getFeatures():
+        puPolygonDict[aPolygon.id()] = aPolygon
+        puIDGeomDict[aPolygon.attributes()[unitIDFieldIndex]] = aPolygon.geometry()
+        spatialIndex.insertFeature(aPolygon)
 
-    runningPUVertexDict = {}
+    progressCount = 1
+    numPUs = len(puPolygonDict.keys())
 
-    # Create a dictionary of all features
-    feature_dict = {f.id(): f for f in puLayer.getFeatures()}
-
-    # Build a spatial index
-    index = QgsSpatialIndex()
-    for aPolygon in feature_dict.values():
-        index.insertFeature(aPolygon)
-
-    progressCount = 0
-    numPUs = len(feature_dict.keys())
-    puIDSet = set()
-    # Loop through all features and find features that touch each feature
-    for aPolygon in feature_dict.values():
-        puGeom = aPolygon.geometry()
-        puAttributes = aPolygon.attributes()
-        puID = puAttributes[unitIDFieldOrder]
-        puIDSet.add(puID)
-        progressCount += 1
+    for puID in puIDGeomDict:
         progressMessage = "Bound.dat file: processed " + str(progressCount) + " of " + str(numPUs) + " planning units"
         qgis.utils.iface.mainWindow().statusBar().showMessage(progressMessage)
+        progressCount += 1
 
-        try:
-            puVertexSet = runningPUVertexDict[puID]
-        except KeyError:
-            aPolyPointList = puGeom.asPolygon()
-            puVertexSet = convertPolygonPointList2VertexSet(aPolyPointList)
-            runningPUVertexDict[puID] = puVertexSet
+        puGeom = puIDGeomDict[puID]
+        puVertexSet = makeNewPUVertexSet(puGeom)
 
-
-        # Find all features that intersect the bounding box of the current feature.
-        # We use spatial index to find the features intersecting the bounding box
-        # of the current feature. This will narrow down the features that we need
-        # to check neighboring features.
-        intersecting_pu_list = index.intersects(puGeom.boundingBox())
-        neighbVertexDict = {}
-
-        for intersecting_pu in intersecting_pu_list:
-            # Look up the feature from the dictionary
-            intersecting_Polygon = feature_dict[intersecting_pu]
-            intersectingAttributes = intersecting_Polygon.attributes()
-            intersectPUID = intersectingAttributes[unitIDFieldOrder]
-
-            # For our purpose we consider a feature as 'neighbor' if it touches or
-            # intersects a feature. We use the 'disjoint' predicate to satisfy
-            # these conditions. So if a feature is not disjoint, it is a neighbor.
-            if (aPolygon != intersecting_Polygon and not intersecting_Polygon.geometry().disjoint(puGeom) and not intersectPUID in puIDSet):
-                intersectingAttributes = intersecting_Polygon.attributes()
-                neighbPUID = intersectingAttributes[unitIDFieldOrder]
-
-                # Get set of vertices for each neighbour. Create them first, then put them in a dict for later
-
-                try:
-                    neighPUVertexSet = runningPUVertexDict[neighbPUID]
-                except KeyError:
-                    neighGeom = intersecting_Polygon.geometry()
-                    aNeighbPolyPointList = neighGeom.asPolygon()
-                    neighPUVertexSet = convertPolygonPointList2VertexSet(aNeighbPolyPointList)
-                    runningPUVertexDict[neighbPUID] = neighPUVertexSet
-
-                neighbVertexDict[neighbPUID] = neighPUVertexSet
-
-        vertexKeyDict = {}
-        for aNeighbPUID in neighbVertexDict:
-            aVertexSet = neighbVertexDict[aNeighbPUID]
-            for aVertex in aVertexSet:
-                vertexKeyDict[aVertex] = aNeighbPUID
+        neighbPUIDSet = makeNeighbPUIDSet(puPolygonDict, spatialIndex, puGeom, puID, unitIDFieldIndex)
+        neighbVertexDict = makeNeighbVertexDict(puIDGeomDict, neighbPUIDSet)
+        vertexKeyNeighbPUIDDict = makeVertexKeyNeighbPUIDDict(neighbVertexDict)
 
         for aVertex in puVertexSet:
-            (x1, y1, x2, y2) = aVertex
-            xLength = x2 - x1
-            yLength = y2 - y1
-            vertexLength = math.sqrt(xLength**2 + yLength**2)
-            try:
-                bNeighbPUID = vertexKeyDict[aVertex]
-                neighPUVertexSet = runningPUVertexDict[bNeighbPUID]
-                runningPUVertexDict[bNeighbPUID] = neighPUVertexSet
+            neighbPUID = returnNeighbPUID(vertexKeyNeighbPUIDDict, aVertex, puID)
+            if puID <= neighbPUID: #This stops double counting of shared edges
+                puDictKey = (puID, neighbPUID)
+                boundResultsDict[puDictKey] = returnRunningLengthValue(boundResultsDict, aVertex, puDictKey)
 
-            except KeyError:
-                bNeighbPUID = puID
+    writeBoundDatFile(setupObject, boundResultsDict, setupObject.decimalPlaces, extEdgeBool)
 
-            if puID > bNeighbPUID:
-                puDictKey = (bNeighbPUID, puID)
-            else:
-                puDictKey = (puID, bNeighbPUID)
+def returnRunningLengthValue(boundResultsDict, aVertex, puDictKey):
+    vertexLength = calcVertexLength(aVertex)
+    try:
+        runningLengthValue = boundResultsDict[puDictKey]
+        runningLengthValue += vertexLength
+    except KeyError:
+        runningLengthValue = vertexLength
 
-            try:
-                runningLengthValue = boundResultsDict[puDictKey]
-                runningLengthValue += vertexLength
-                boundResultsDict[puDictKey] = runningLengthValue
-            except KeyError:
-                boundResultsDict[puDictKey] = vertexLength
+    return runningLengthValue
 
-        runningPUVertexDict.pop(puID, None)
+def returnNeighbPUID(vertexKeyDict, aVertex, puID):
+    try:
+        neighbPUID = vertexKeyDict[aVertex]
+    except KeyError:
+        neighbPUID = puID
 
+    return neighbPUID
+
+def makeNewPUVertexSet(puGeom):
+    aPolyPointList = puGeom.asPolygon()
+    puVertexSet = convertPolygonPointList2VertexSet(aPolyPointList)
+
+    return puVertexSet
+
+def makeNeighbVertexDict(puIDGeomDict, neighbPUIDSet):
+    neighbVertexDict = {}
+    for neighbPUID in neighbPUIDSet:
+        neighbPUGeom = puIDGeomDict[neighbPUID]
+        neighPUVertexSet = makeNewPUVertexSet(neighbPUGeom)
+        neighbVertexDict[neighbPUID] = neighPUVertexSet
+
+    return neighbVertexDict
+
+def makeVertexKeyNeighbPUIDDict(neighbVertexDict):
+    vertexKeyNeighbPUIDDict = {}
+    for aNeighbPUID in neighbVertexDict:
+        aVertexSet = neighbVertexDict[aNeighbPUID]
+        for aVertex in aVertexSet:
+            vertexKeyNeighbPUIDDict[aVertex] = aNeighbPUID
+
+    return vertexKeyNeighbPUIDDict
+
+def makeNeighbPUIDSet(puPolygonDict, spatialIndex, puGeom, puID, unitIDFieldIndex):
+    neighbPUIDSet = set()
+    intersectPUList = spatialIndex.intersects(puGeom.boundingBox())
+    for aPolygon in intersectPUList:
+        intersectPolygon = puPolygonDict[aPolygon]
+
+        if (aPolygon != intersectPolygon and not intersectPolygon.geometry().disjoint(puGeom)):
+            intersectingAttributes = intersectPolygon.attributes()
+            neighbPUID = intersectingAttributes[unitIDFieldIndex]
+            if neighbPUID != puID:
+                neighbPUIDSet.add(neighbPUID)
+
+    return neighbPUIDSet
+
+def calcVertexLength(aVertex):
+    (x1, y1, x2, y2) = aVertex
+    xLength = x2 - x1
+    yLength = y2 - y1
+    vertexLength = math.sqrt(xLength**2 + yLength**2)
+
+    return vertexLength
+
+def writeBoundDatFile(setupObject, boundResultsDict, decPrec, extEdgeBool):
     boundDatName = setupObject.inputPath + os.sep + "bound.dat"
     boundDatWriter = csv.writer(open(boundDatName, "wb"))
     boundDatWriter.writerow(["id1", "id2", "boundary"])
@@ -215,6 +205,7 @@ def createBoundDatFile(setupObject, extEdgeBool):
             boundDatWriter.writerow([id1, id2, aAmount])
         if id1 == id2 and extEdgeBool == True:
             boundDatWriter.writerow([id1, id2, aAmount])
+
 
 def convertPolygonPointList2VertexSet(polyPointList): #This deals with multi polygon planning units
     vertexSet = set()
@@ -276,55 +267,99 @@ def returnOutputName(setupObject):
 
     return outputName
 
-def checkMarxanInputValuesBool(marxanGUI, numIter, numRun, blmValue, missingProp, initialProp):
-    checkBool = True
+def checkMarxanInputValuesBool(numIterString, numRunString, blmValueString, missingPropString, initialPropString, numParallelAnalyses):
+    numIterBool = checkNumIter(numIterString)
+    numRunBool = checkNumRuns(numRunString)
+    blmValueBool = checkBlmValue(blmValueString)
+    missingPropBool = checkMissingPropValue(missingPropString)
+    initialPropValueBool = checkInitialPropValue(initialPropString)
+    numParallelAnalysesBool = checkNumParallelAnalysesValue(numRunString, numParallelAnalyses)
 
+    if [numIterBool, numRunBool, blmValueBool, missingPropBool, initialPropValueBool, numParallelAnalysesBool] == [True, True, True, True, True, True]:
+        marxanInputValuesBool = True
+    else:
+        marxanInputValuesBool = False
+
+    return marxanInputValuesBool
+
+def checkNumIter(numIter):
+    checkBool = True
     try:
         int(numIter)
         if int(numIter) < 10000:
             checkBool = False
-            QMessageBox.warning(marxanGUI,"Input error", "The number of iterations must be higher than 10000 (remind me to tell you why).")
+            qgis.utils.iface.messageBar().pushMessage("Input error", "The number of iterations must be higher than 10000 because it must be be higher than the NUMTEMP value used in Marxan (see the Marxan manual for more details).", QgsMessageBar.WARNING)
     except ValueError:
         checkBool = False
-        QMessageBox.warning(marxanGUI,"Input error", "The number of iterations must be an integer.")
+        qgis.utils.iface.messageBar().pushMessage("Input error", "The number of iterations must be an integer", QgsMessageBar.WARNING)
 
+    return checkBool
+
+def checkNumRuns(numRun):
+    checkBool = True
     try:
         int(numRun)
         if int(numRun) < 1:
             checkBool = False
-            QMessageBox.warning(marxanGUI,"Input error", "The number of runs must be 1 or more.")
+            qgis.utils.iface.messageBar().pushMessage("Input error", "The number of runs must be 1 or a larger whole number", QgsMessageBar.WARNING)
     except ValueError:
         checkBool = False
-        QMessageBox.warning(marxanGUI,"Input error", "The number of runs must be an integer.")
+        qgis.utils.iface.messageBar().pushMessage("Input error", "The number of runs must be an integer.", QgsMessageBar.WARNING)
 
+    return checkBool
+
+def checkBlmValue(blmValue):
+    checkBool = True
     try:
         float(blmValue)
         if float(blmValue) < 0:
             checkBool = False
-            QMessageBox.warning(marxanGUI,"Input error", "The boundary length modifier must be a non-negative number.")
+            qgis.utils.iface.messageBar().pushMessage("Input error", "The boundary length modifier must be a non-negative number.", QgsMessageBar.WARNING)
     except ValueError:
         checkBool = False
-        QMessageBox.warning(marxanGUI,"Input error", "The boundary length modifier must be a non-negative number.")
+        qgis.utils.iface.messageBar().pushMessage("Input error", "The boundary length modifier must be a non-negative number.", QgsMessageBar.WARNING)
 
+    return checkBool
+
+def checkMissingPropValue(missingProp):
+    checkBool = True
     try:
         float(missingProp)
         if float(missingProp) < 0 or float(missingProp) > 1:
             checkBool = False
-            QMessageBox.warning(marxanGUI,"Input error", "The species proportion value must be a number between 0 and 1.")
+            qgis.utils.iface.messageBar().pushMessage("Input error", "The species proportion value must be a number between 0 and 1.", QgsMessageBar.WARNING)
     except ValueError:
         checkBool = False
-        QMessageBox.warning(marxanGUI,"Input error", "The species proportion value must be a number between 0 and 1")
+        qgis.utils.iface.messageBar().pushMessage("Input error", "The species proportion value must be a number between 0 and 1.", QgsMessageBar.WARNING)
 
+    return checkBool
+
+
+def checkInitialPropValue(initialProp):
+    checkBool = True
     try:
         float(initialProp)
         if float(initialProp) < 0 or float(initialProp) > 1:
             checkBool = False
-            QMessageBox.warning(marxanGUI,"Input error", "The proportion of planning units randomly included at the beginning of each run must be a number between 0 and 1.")
+            qgis.utils.iface.messageBar().pushMessage("Input error", "The proportion of planning units randomly included at the beginning of each run must be a number between 0 and 1.", QgsMessageBar.WARNING)
     except ValueError:
         checkBool = False
-        QMessageBox.warning(marxanGUI,"Input error", "The proportion of planning units randomly included at the beginning of each run must be a number between 0 and 1.")
+        qgis.utils.iface.messageBar().pushMessage("Input error", "The proportion of planning units randomly included at the beginning of each run must be a number between 0 and 1.", QgsMessageBar.WARNING)
 
     return checkBool
+
+
+def checkNumParallelAnalysesValue(numRunString, numParallelAnalyses):
+    checkBool = True
+    try:
+        if int(numRunString) < numParallelAnalyses:
+            checkBool = False
+            qgis.utils.iface.messageBar().pushMessage("Input error", "The number of parallel analyses must be less than the specified number of runs.", QgsMessageBar.WARNING)
+    except ValueError:
+        pass
+
+    return checkBool
+
 
 def marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool):
     marxanInputDict = {}
@@ -346,82 +381,76 @@ def marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initial
 
 
 def makeMarxanInputFile(setupObject, marxanInputDict):
-    numIter = marxanInputDict["numIter"]
-    numRun = marxanInputDict["numRun"]
-    blmValue = marxanInputDict["blmValue"]
-    missingProp = marxanInputDict["missingProp"]
-    initialProp = marxanInputDict["initialProp"]
-    outputName = marxanInputDict["outputName"]
-    extraOutputsBool = marxanInputDict["extraOutputsBool"]
-
-    if marxanInputDict["extraOutputsBool"] == True:
+    if marxanInputDict["extraOutputsBool"]:
         extraOutputValue = "2"
     else:
         extraOutputValue = "0"
 
     marxanPath = marxanInputDict["marxanPath"]
     marxanSetupPath = marxanInputDict["marxanSetupPath"]
-
     if os.path.isfile(marxanPath):
-        marxanWriter = csv.writer(open(marxanSetupPath, "wb"))
+        writeMarxanInputFile(setupObject, marxanInputDict, marxanSetupPath, extraOutputValue)
 
-        header1 = "Input file for Marxan program, written by Ian Ball, Hugh Possingham and Matt Watts."
-        header2 = "This file was generated using CLUZ, written by Bob Smith"
-        marxanWriter.writerow([header1])
-        marxanWriter.writerow([header2])
-        marxanWriter.writerow([])
+def writeMarxanInputFile(setupObject, marxanInputDict, marxanSetupPath, extraOutputValue):
+    marxanWriter = csv.writer(open(marxanSetupPath, "wb"))
 
-        marxanWriter.writerow(["General Parameters"])
-        marxanWriter.writerow(["VERSION 0.1"])
-        marxanWriter.writerow(["BLM " + str(blmValue)])
-        marxanWriter.writerow(["PROP  " + str(initialProp)])
-        marxanWriter.writerow(["RANDSEED -1"])
-        marxanWriter.writerow(["BESTSCORE  10"])
-        marxanWriter.writerow(["NUMREPS " + str(numRun)])
-        marxanWriter.writerow([])
+    header1 = "Input file for Marxan program, written by Ian Ball, Hugh Possingham and Matt Watts."
+    header2 = "This file was generated using CLUZ, written by Bob Smith"
+    marxanWriter.writerow([header1])
+    marxanWriter.writerow([header2])
+    marxanWriter.writerow([])
 
-        marxanWriter.writerow(["Annealing Parameters"])
-        marxanWriter.writerow(["NUMITNS " + str(numIter)])
-        marxanWriter.writerow(["STARTTEMP -1.00000000000000E+0000"])
-        marxanWriter.writerow(["COOLFAC  6.00000000000000E+0000"])
-        marxanWriter.writerow(["NUMTEMP 10000"])
-        marxanWriter.writerow([])
+    marxanWriter.writerow(["General Parameters"])
+    marxanWriter.writerow(["VERSION 0.1"])
+    marxanWriter.writerow(["BLM " + str(marxanInputDict["blmValue"])])
+    marxanWriter.writerow(["PROP  " + str(marxanInputDict["initialProp"])])
+    marxanWriter.writerow(["RANDSEED -1"])
+    marxanWriter.writerow(["BESTSCORE  10"])
+    marxanWriter.writerow(["NUMREPS " + str(marxanInputDict["numRun"])])
+    marxanWriter.writerow([])
 
-        marxanWriter.writerow(["Cost Threshold"])
-        marxanWriter.writerow(["COSTTHRESH  0.00000000000000E+0000"])
-        marxanWriter.writerow(["THRESHPEN1  1.40000000000000E+0001"])
-        marxanWriter.writerow(["THRESHPEN2  1.00000000000000E+0000"])
-        marxanWriter.writerow([])
+    marxanWriter.writerow(["Annealing Parameters"])
+    marxanWriter.writerow(["NUMITNS " + str(marxanInputDict["numIter"])])
+    marxanWriter.writerow(["STARTTEMP -1.00000000000000E+0000"])
+    marxanWriter.writerow(["COOLFAC  6.00000000000000E+0000"])
+    marxanWriter.writerow(["NUMTEMP 10000"])
+    marxanWriter.writerow([])
 
-        marxanWriter.writerow(["Input Files"])
-        marxanWriter.writerow(["INPUTDIR " + setupObject.inputPath])
-        marxanWriter.writerow(["SPECNAME spec.dat"])
-        marxanWriter.writerow(["PUNAME pu.dat"])
-        marxanWriter.writerow(["PUVSPRNAME puvspr2.dat"])
-        marxanWriter.writerow(["MATRIXSPORDERNAME sporder.dat"])
-        marxanWriter.writerow(["BOUNDNAME bound.dat"])
-        marxanWriter.writerow([])
+    marxanWriter.writerow(["Cost Threshold"])
+    marxanWriter.writerow(["COSTTHRESH  0.00000000000000E+0000"])
+    marxanWriter.writerow(["THRESHPEN1  1.40000000000000E+0001"])
+    marxanWriter.writerow(["THRESHPEN2  1.00000000000000E+0000"])
+    marxanWriter.writerow([])
 
-        marxanWriter.writerow(["Save Files"])
-        marxanWriter.writerow(["SCENNAME " + outputName])
-        marxanWriter.writerow(["SAVERUN " + extraOutputValue])
-        marxanWriter.writerow(["SAVEBEST 2"])
-        marxanWriter.writerow(["SAVESUMMARY 2"])
-        marxanWriter.writerow(["SAVESCEN " + extraOutputValue])
-        marxanWriter.writerow(["SAVETARGMET 2"])
-        marxanWriter.writerow(["SAVESUMSOLN 2"])
-        marxanWriter.writerow(["SAVELOG " + extraOutputValue])
-        marxanWriter.writerow(["OUTPUTDIR " + setupObject.outputPath])
-        marxanWriter.writerow([])
+    marxanWriter.writerow(["Input Files"])
+    marxanWriter.writerow(["INPUTDIR " + setupObject.inputPath])
+    marxanWriter.writerow(["SPECNAME spec.dat"])
+    marxanWriter.writerow(["PUNAME pu.dat"])
+    marxanWriter.writerow(["PUVSPRNAME puvspr2.dat"])
+    marxanWriter.writerow(["MATRIXSPORDERNAME sporder.dat"])
+    marxanWriter.writerow(["BOUNDNAME bound.dat"])
+    marxanWriter.writerow([])
 
-        marxanWriter.writerow(["Program control."])
-        marxanWriter.writerow(["RUNMODE 1"])
-        marxanWriter.writerow(["MISSLEVEL  " + str(missingProp)])
-        marxanWriter.writerow(["ITIMPTYPE 0"])
-        marxanWriter.writerow(["HEURTYPE -1"])
-        marxanWriter.writerow(["CLUMPTYPE 0"])
-        marxanWriter.writerow(["VERBOSITY 3"])
-        marxanWriter.writerow([])
+    marxanWriter.writerow(["Save Files"])
+    marxanWriter.writerow(["SCENNAME " + marxanInputDict["outputName"]])
+    marxanWriter.writerow(["SAVERUN " + extraOutputValue])
+    marxanWriter.writerow(["SAVEBEST 2"])
+    marxanWriter.writerow(["SAVESUMMARY 2"])
+    marxanWriter.writerow(["SAVESCEN " + extraOutputValue])
+    marxanWriter.writerow(["SAVETARGMET 2"])
+    marxanWriter.writerow(["SAVESUMSOLN 2"])
+    marxanWriter.writerow(["SAVELOG " + extraOutputValue])
+    marxanWriter.writerow(["OUTPUTDIR " + setupObject.outputPath])
+    marxanWriter.writerow([])
+
+    marxanWriter.writerow(["Program control."])
+    marxanWriter.writerow(["RUNMODE 1"])
+    marxanWriter.writerow(["MISSLEVEL  " + str(marxanInputDict["missingProp"])])
+    marxanWriter.writerow(["ITIMPTYPE 0"])
+    marxanWriter.writerow(["HEURTYPE -1"])
+    marxanWriter.writerow(["CLUMPTYPE 0"])
+    marxanWriter.writerow(["VERBOSITY 3"])
+    marxanWriter.writerow([])
 
 def makeParallelAnalysesDetailsList(numParallelAnalyses, outputName, numRuns):
     parallelAnalysesDetailsList = []
@@ -456,9 +485,7 @@ def marxanUpdateSetupObject(setupObject, outputName, numIter, numRun, blmValue, 
 
 def makeMarxanBatFile(setupObject):
     marxanFullName = setupObject.marxanPath
-    marxanName = os.path.basename(marxanFullName)
     marxanBatFileName = marxanFullName.replace(".exe", ".bat")
-
     batWriter = csv.writer(open(marxanBatFileName, "wb"))
     batWriter.writerow(["cd " + os.path.dirname(marxanFullName)])
     batWriter.writerow([marxanFullName])
@@ -467,7 +494,6 @@ def makeMarxanBatFile(setupObject):
 
 def waitingForMarxan(setupObject, outputName):
     marxanPathName = setupObject.outputPath + os.sep + outputName + "_best.txt"
-
     try:
         while os.path.isfile(marxanPathName) is False:
             time.sleep(2)
@@ -478,7 +504,6 @@ def waitingForParallelMarxan(setupObject, parallelAnalysesDetailsList):
     marxanPathNameList = []
     for (numRun, outputName) in parallelAnalysesDetailsList:
         marxanPathNameList.append(setupObject.outputPath + os.sep + outputName + "_best.txt")
-
     waitingCount = 999
     try:
         while waitingCount > 0:
@@ -580,7 +605,7 @@ def addBestMarxanOutputToPUShapefile(setupObject, bestOutputFile, bestFieldName)
             bestStatus = "-"
         puLayer.changeAttributeValue(puRow, bestFieldOrder, bestStatus, True)
     puLayer.commitChanges()
-    puLayer.reload() #DOES THIS WORK????????????????????????????????????????????????????????????????
+
 
 ####################################################################http://www.opengis.ch/2015/04/29/performance-for-mass-updating-features-on-layers/
 def addSummedMarxanOutputToPUShapefile(setupObject, summedOutputFile, summedFieldName):
@@ -632,10 +657,11 @@ def produceCountField(setupObject, countFieldName, selectedTypeList):
     typeSet = set(selectedTypeList)
     for puID in setupObject.abundPUKeyDict:
         featCount = 0
-        puFeatList = setupObject.abundPUKeyDict[puID].keys()
-        for featID in puFeatList:
+        puFeatDict = setupObject.abundPUKeyDict[puID]
+        for featID in puFeatDict:
+            featAmount = puFeatDict[featID]
             featType = setupObject.targetDict[featID][1]
-            if featType in typeSet:
+            if featAmount > 0 and featType in typeSet:
                 featCount += 1
         countDict[puID] = featCount
 

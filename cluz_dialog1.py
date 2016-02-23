@@ -3,9 +3,9 @@
 /***************************************************************************
                                  A QGIS plugin
  CLUZ for QGIS
-                              -------------------
-        begin                : 18-07-2015
-        copyright            : (C) 2015 by Bob Smith, DICE
+                             -------------------
+        begin                : 2016-23-02
+        copyright            : (C) 2016 by Bob Smith, DICE
         email                : r.j.smith@kent.ac.uk
  ***************************************************************************/
 
@@ -104,8 +104,8 @@ class setupDialog(QDialog, Ui_setupDialog):
         QObject.connect(self.saveasButton, SIGNAL("clicked()"), lambda: self.saveAsSetupFile(setupObject))
 
     def setMarxanPath(self):
-        marxanPathNameText = QFileDialog.getOpenFileName(self, 'Select Marxan file', '*.exe')
-        marxanPathNameText = os.path.abspath(marxanPathNameText)
+        marxanPathNameRawText = QFileDialog.getOpenFileName(self, 'Select Marxan file', '*.exe')
+        marxanPathNameText = os.path.abspath(marxanPathNameRawText)
         if marxanPathNameText != None:
             self.marxanLineEdit.setText(marxanPathNameText)
 

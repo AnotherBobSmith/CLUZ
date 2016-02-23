@@ -3,9 +3,9 @@
 /***************************************************************************
                                  A QGIS plugin
  CLUZ for QGIS
-                              -------------------
-        begin                : 18-07-2015
-        copyright            : (C) 2015 by Bob Smith, DICE
+                             -------------------
+        begin                : 2016-23-02
+        copyright            : (C) 2016 by Bob Smith, DICE
         email                : r.j.smith@kent.ac.uk
  ***************************************************************************/
 
@@ -20,11 +20,9 @@
 """
 
 from PyQt4.QtCore import *
-from PyQt4 import QtGui
 from qgis.core import *
 from qgis.gui import *
 from qgis.utils import *
-from qgis.core import QgsComposition
 import qgis
 
 import os
@@ -40,17 +38,6 @@ def addPlanningUnit(setupObject, legendPosition):
     puLayer.setRendererV2(myRenderer)
     QgsMapLayerRegistry.instance().addMapLayer(puLayer)
 
-    ############################################################################
-    # abundLayer1Name = setupObject.puPath.replace("planning units", "cycad")
-    # abund1Layer = QgsVectorLayer(abundLayer1Name, "Cycad", "ogr")
-    # QgsMapLayerRegistry.instance().addMapLayer(abund1Layer)
-    # abundLayer2Name = setupObject.puPath.replace("planning units", "nests")
-    # abund2Layer = QgsVectorLayer(abundLayer2Name, "Nests", "ogr")
-    # QgsMapLayerRegistry.instance().addMapLayer(abund2Layer)
-    # abundLayer3Name = setupObject.puPath.replace("planning units", "rivers")
-    # abund3Layer = QgsVectorLayer(abundLayer3Name, "Rivers", "ogr")
-    # QgsMapLayerRegistry.instance().addMapLayer(abund3Layer)
-    ############################################################################
     canvas.refresh()
     qgis.utils.iface.setActiveLayer(puLayer)
 
@@ -87,35 +74,11 @@ def makePULayerLegendCategory():
     return categoryList
 
 def createDistributionMapShapefile(setupObject, distShapeFilePathName, selectedFeatIDList):
-    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
-    puFeatures = puLayer.getFeatures()
-    puIDFieldIndex = puLayer.fieldNameIndex('Unit_ID')
-
     distFileName = os.path.basename(distShapeFilePathName)
-    newFields = QgsFields()
-    newFields.append(QgsField("Unit_ID", QVariant.Int))
-    writer = QgsVectorFileWriter(distShapeFilePathName, "CP1250", newFields, QGis.WKBPolygon, puLayer.dataProvider().crs(), "ESRI Shapefile")
-
-    #Make distribution shapefile copying PU polygons and ID field
-    for puFeature in puFeatures:
-        puGeom = puFeature.geometry()
-        puAttributes = puFeature.attributes()
-        puID = puAttributes[puIDFieldIndex]
-        featAttribList = [puID]
-
-        distFeat = QgsFeature()
-        distFeat.setGeometry(puGeom)
-        distFeat.setAttributes(featAttribList)
-        writer.addFeature(distFeat)
-
-    del writer
+    makeBaseDistributionMapShapefile(setupObject, distShapeFilePathName)
 
     distrLayer = QgsVectorLayer(distShapeFilePathName, distFileName, "ogr")
-    distrProvider = distrLayer.dataProvider()
-
-    for aFeatID in selectedFeatIDList:
-        distrProvider.addAttributes([QgsField("F_" + str(aFeatID), QVariant.Double, "double", 12, 3)])
-        distrLayer.updateFields()
+    addPUIDValuesToBaseDistributionMapShapefile(distrLayer, selectedFeatIDList)
 
     abundPUKeyDict = setupObject.abundPUKeyDict
     abundValuesDict = {}
@@ -146,6 +109,35 @@ def createDistributionMapShapefile(setupObject, distShapeFilePathName, selectedF
 
     distrLayer.commitChanges()
     return abundValuesDict
+
+def makeBaseDistributionMapShapefile(setupObject, distShapeFilePathName):
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+    puFeatures = puLayer.getFeatures()
+    puIDFieldIndex = puLayer.fieldNameIndex('Unit_ID')
+    newFields = QgsFields()
+    newFields.append(QgsField("Unit_ID", QVariant.Int))
+    writer = QgsVectorFileWriter(distShapeFilePathName, "CP1250", newFields, QGis.WKBPolygon, puLayer.dataProvider().crs(), "ESRI Shapefile")
+
+    #Make distribution shapefile copying PU polygons and ID field
+    for puFeature in puFeatures:
+        puGeom = puFeature.geometry()
+        puAttributes = puFeature.attributes()
+        puID = puAttributes[puIDFieldIndex]
+        featAttribList = [puID]
+
+        distFeat = QgsFeature()
+        distFeat.setGeometry(puGeom)
+        distFeat.setAttributes(featAttribList)
+        writer.addFeature(distFeat)
+
+    del writer
+
+def addPUIDValuesToBaseDistributionMapShapefile(distrLayer, selectedFeatIDList):
+    distrProvider = distrLayer.dataProvider()
+    for aFeatID in selectedFeatIDList:
+        distrProvider.addAttributes([QgsField("F_" + str(aFeatID), QVariant.Double, "double", 12, 3)])
+        distrLayer.updateFields()
+
 
 def displayDistributionMaps(setupObject, distShapeFilePathName, abundValuesDict, legendType, selectedFeatIDList):
     iface = qgis.utils.iface
@@ -297,47 +289,6 @@ def displayBestOutput(setupObject, bestFieldName, bestShapefileName):
 
     canvas.refresh()
 
-# def displaySummedOutput(setupObject, summedFieldName, summedShapefileName):
-#     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
-#     iface = qgis.utils.iface
-#     canvas = iface.mapCanvas()
-#     summedLayer = QgsVectorLayer(setupObject.puPath, summedShapefileName, "ogr")
-#     provider = puLayer.dataProvider()
-#
-#     puFeatures = puLayer.getFeatures()
-#     summedFieldOrder = provider.fieldNameIndex(summedFieldName)
-#
-#     maxSumScore = 0 #This will be used to set highest value in legend
-#     for puFeature in puFeatures:
-#         puAttributes = puFeature.attributes()
-#         puSumScore = puAttributes[summedFieldOrder]
-#         if puSumScore > maxSumScore:
-#             maxSumScore = puSumScore
-#
-#     colourList = ['#C5C2C5','#CDCEB4','#DEDEA3','#EEE894','#FFFA8B','#FFE273','#FFAA52','#FF8541','#FF6D31','#FF0000']
-#     rangeList = []
-#     minValue = 0
-#     incValue = float(maxSumScore) / 10
-#
-#
-#     for aValue in range(0, 10):
-#         maxValue = minValue + incValue
-#         if aValue == 9:
-#             maxValue = maxSumScore
-#         myColour = colourList[aValue]
-#         mySymbol = QgsFillSymbolV2.createSimple({'style': 'solid', 'color': myColour, 'color_border': myColour})
-#         theRange = QgsRendererRangeV2(minValue, maxValue, mySymbol, str(minValue) + " - " + str(maxValue))
-#         minValue = maxValue
-#         rangeList.insert(0, theRange)
-#
-#
-#     myRenderer = QgsGraduatedSymbolRendererV2('', rangeList)
-#     myRenderer.setMode(QgsGraduatedSymbolRendererV2.EqualInterval)
-#     myRenderer.setClassAttribute(summedFieldName)
-#     summedLayer.setRendererV2(myRenderer)
-#     QgsMapLayerRegistry.instance().addMapLayer(summedLayer)
-#
-#     canvas.refresh()
 
 def reloadPULayer(setupObject):
     root = QgsProject.instance().layerTreeRoot()
@@ -360,35 +311,18 @@ def reloadPULayer(setupObject):
     QgsMapLayerRegistry.instance().addMapLayer(puLayer, False)
     root.insertLayer(puLayerPosition, puLayer)
 
-# def reloadLayer(mainLayer):
-#     reloadBool = False
-#     mainLayerPath = mainLayer.dataProvider().dataSourceUri()
-#     mainLayerName = mainLayer.name()
-#     renderer = mainLayer.rendererV2()
-#
-#     root = QgsProject.instance().layerTreeRoot()
-#
-#     layers = QgsMapLayerRegistry.instance().mapLayers()
-#     nameList = []
-#     for QGISFullname, layer in layers.iteritems():
-#         layerName = str(layer.name())
-#         nameList.append(layerName)
-#         if layerName == mainLayerName:
-#             QgsMapLayerRegistry.instance().removeMapLayer(layer.id())
-#             reloadBool = True
-#
-#     if reloadBool == True:
-#         mainLayerPosition = nameList.index(mainLayerName)
-#         copyMainLayer = QgsVectorLayer(mainLayerPath, mainLayerName, "ogr")
-#         copyMainLayer.setRenderer(renderer)
-#         QgsMapLayerRegistry.instance().addMapLayer(copyMainLayer, False)
-#         root.insertLayer(mainLayerPosition, copyMainLayer)
-
 def removePreviousMarxanLayers():
     layers = QgsMapLayerRegistry.instance().mapLayers()
     for QGISFullname, layer in layers.iteritems():
         layerName = layer.name()
         if str(layerName)[0:6] == "Best (" or str(layerName)[0:10] == "SF_Score (":
+            QgsMapLayerRegistry.instance().removeMapLayer(layer.id())
+
+def removePreviousMinPatchLayers():
+    layers = QgsMapLayerRegistry.instance().mapLayers()
+    for QGISFullname, layer in layers.iteritems():
+        layerName = layer.name()
+        if str(layerName)[0:9] == "MP Best (" or str(layerName)[0:13] == "MP SF_Score (":
             QgsMapLayerRegistry.instance().removeMapLayer(layer.id())
 
 def displayGraduatedLayer(setupObject, fieldName, layerName, legendCode):

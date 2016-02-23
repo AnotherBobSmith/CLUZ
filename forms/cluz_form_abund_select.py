@@ -2,8 +2,7 @@
 
 # Form implementation generated from reading ui file 'cluz_form_abund_select.ui'
 #
-# Created: Sun Mar 08 11:23:23 2015
-#      by: PyQt4 UI code generator 4.10.3
+# Created by: PyQt4 UI code generator 4.11.4
 #
 # WARNING! All changes made in this file will be lost!
 
@@ -27,12 +26,26 @@ class Ui_abundSelectDialog(object):
     def setupUi(self, abundSelectDialog):
         abundSelectDialog.setObjectName(_fromUtf8("abundSelectDialog"))
         abundSelectDialog.setWindowModality(QtCore.Qt.ApplicationModal)
-        abundSelectDialog.resize(622, 580)
+        abundSelectDialog.resize(600, 580)
+        sizePolicy = QtGui.QSizePolicy(QtGui.QSizePolicy.Fixed, QtGui.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(abundSelectDialog.sizePolicy().hasHeightForWidth())
+        abundSelectDialog.setSizePolicy(sizePolicy)
+        abundSelectDialog.setMinimumSize(QtCore.QSize(600, 580))
+        abundSelectDialog.setMaximumSize(QtCore.QSize(600, 580))
         self.featLabel = QtGui.QLabel(abundSelectDialog)
-        self.featLabel.setGeometry(QtCore.QRect(150, 20, 371, 16))
+        self.featLabel.setGeometry(QtCore.QRect(130, 20, 451, 16))
+        self.featLabel.setMinimumSize(QtCore.QSize(350, 10))
         self.featLabel.setObjectName(_fromUtf8("featLabel"))
         self.featListWidget = QtGui.QListWidget(abundSelectDialog)
-        self.featListWidget.setGeometry(QtCore.QRect(150, 40, 450, 481))
+        self.featListWidget.setGeometry(QtCore.QRect(130, 40, 450, 480))
+        sizePolicy = QtGui.QSizePolicy(QtGui.QSizePolicy.Fixed, QtGui.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.featListWidget.sizePolicy().hasHeightForWidth())
+        self.featListWidget.setSizePolicy(sizePolicy)
+        self.featListWidget.setMinimumSize(QtCore.QSize(450, 480))
         self.featListWidget.setSelectionMode(QtGui.QAbstractItemView.MultiSelection)
         self.featListWidget.setObjectName(_fromUtf8("featListWidget"))
         self.okButton = QtGui.QPushButton(abundSelectDialog)
@@ -42,7 +55,13 @@ class Ui_abundSelectDialog(object):
         self.cancelButton.setGeometry(QtCore.QRect(370, 540, 75, 23))
         self.cancelButton.setObjectName(_fromUtf8("cancelButton"))
         self.logoLabel = QtGui.QLabel(abundSelectDialog)
-        self.logoLabel.setGeometry(QtCore.QRect(0, 20, 131, 351))
+        self.logoLabel.setGeometry(QtCore.QRect(0, 10, 130, 350))
+        sizePolicy = QtGui.QSizePolicy(QtGui.QSizePolicy.Fixed, QtGui.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.logoLabel.sizePolicy().hasHeightForWidth())
+        self.logoLabel.setSizePolicy(sizePolicy)
+        self.logoLabel.setMinimumSize(QtCore.QSize(130, 350))
         self.logoLabel.setText(_fromUtf8(""))
         self.logoLabel.setPixmap(QtGui.QPixmap(_fromUtf8(":/plugins/Cluz/icons/icons/setup_logo.png")))
         self.logoLabel.setObjectName(_fromUtf8("logoLabel"))

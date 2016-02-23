@@ -3,9 +3,9 @@
 /***************************************************************************
                                  A QGIS plugin
  CLUZ for QGIS
-                              -------------------
-        begin                : 18-07-2015
-        copyright            : (C) 2015 by Bob Smith, DICE
+                             -------------------
+        begin                : 2016-23-02
+        copyright            : (C) 2016 by Bob Smith, DICE
         email                : r.j.smith@kent.ac.uk
  ***************************************************************************/
 
@@ -19,7 +19,6 @@
  ***************************************************************************/
 """
 
-from PyQt4.QtCore import *
 import qgis
 from qgis.core import *
 from qgis.gui import *
@@ -147,14 +146,6 @@ def undoStatusChangeInPuLayer(setupObject):
     puLayer.commitChanges()
     canvas.refresh()
 
-# def removeUndoField(setupObject):
-#     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
-#     provider = puLayer.dataProvider()
-#     undoFieldOrder = provider.fieldNameIndex("CLUZ_undo")
-#     if undoFieldOrder <> -1:
-#         provider.deleteAttributes([undoFieldOrder])
-#         puLayer.updateFields()
-#         puLayer.commitChanges()
 
 ####################################################################http://www.opengis.ch/2015/04/29/performance-for-mass-updating-features-on-layers/
 def changeBestToEarmarkedPUs(setupObject):

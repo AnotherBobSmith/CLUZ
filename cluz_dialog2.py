@@ -3,9 +3,9 @@
 /***************************************************************************
                                  A QGIS plugin
  CLUZ for QGIS
-                              -------------------
-        begin                : 18-07-2015
-        copyright            : (C) 2015 by Bob Smith, DICE
+                             -------------------
+        begin                : 2016-23-02
+        copyright            : (C) 2016 by Bob Smith, DICE
         email                : r.j.smith@kent.ac.uk
  ***************************************************************************/
 
@@ -18,13 +18,12 @@
  *                                                                         *
  ***************************************************************************/
 """
+
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 from qgis.core import *
-import qgis
-
 from qgis.gui import *
-# from qgis.analysis import *
+import qgis
 
 from cluz_form_distribution import Ui_distributionDialog
 from cluz_form_richness import Ui_richnessDialog
@@ -42,7 +41,8 @@ import time
 import cluz_setup
 import cluz_functions2
 import cluz_display
-import minpatch_main
+import cluz_mpmain
+import cluz_mpsetup
 
 from cluz_setup import MinPatchObject
 
@@ -82,7 +82,7 @@ class distributionDialog(QDialog, Ui_distributionDialog):
     def runDisplayDistributionMaps(self, setupObject):
         if self.intervalRadioButton.isChecked():
             legendType = "equal_interval"
-        else:
+        if self.areaRadioButton.isChecked():
             legendType = "equal_area"
         distShapeFilePathName = self.filePathlineEdit.text()
         selectedFeatList = [item.text() for item in self.featListWidget.selectedItems()]
@@ -102,7 +102,11 @@ class richnessDialog(QDialog, Ui_richnessDialog):
         (countName, rangeName, irrepName) = self.returnInitialFieldNames(setupObject)
         self.countLineEdit.setText(countName)
         self.rangeLineEdit.setText(rangeName)
-        # self.irrepLineEdit.setText(irrepName)
+        self.irrepLineEdit.setText(irrepName)
+
+        self.irrepBox.setVisible(False)
+        self.irrepLabel.setVisible(False)
+        self.irrepLineEdit.setVisible(False)
 
         typeList = self.produceTypeTextList(setupObject)
         self.typeListWidget.addItems(typeList)
@@ -129,14 +133,13 @@ class richnessDialog(QDialog, Ui_richnessDialog):
                 rangeSuffix += 1
         finalRangeName = rangeName + str(rangeSuffix)
 
-        # irrepName = "IRREP"
-        # irrepSuffix = ""
-        # if irrepName in fieldNameList:
-        #     irrepSuffix = 1
-        #     while (irrepName + str(irrepSuffix)) in fieldNameList:
-        #         irrepSuffix += 1
-        # finalIrrepName = irrepName + str(irrepSuffix)
-        finalIrrepName = "Whatever"
+        irrepName = "IRREP"
+        irrepSuffix = ""
+        if irrepName in fieldNameList:
+            irrepSuffix = 1
+            while (irrepName + str(irrepSuffix)) in fieldNameList:
+                irrepSuffix += 1
+        finalIrrepName = irrepName + str(irrepSuffix)
 
         return (finalCountName, finalRangeName, finalIrrepName)
 
@@ -204,21 +207,21 @@ class richnessDialog(QDialog, Ui_richnessDialog):
                 qgis.utils.iface.messageBar().pushMessage("Richness results", "The fields have been successfully added to the planning unit layer attribute table.", QgsMessageBar.INFO, 3)
                 self.close()
 
-        # if self.irrepBox.isChecked() and progressString == "details_fine":
-        #     irrepFieldName = self.irrepLineEdit.text()
-        #     if irrepFieldName in fieldNameList:
-        #         qgis.utils.iface.messageBar().pushMessage("Irreplaceability field name duplication", "The planning unit layer already contains a field named " + irrepFieldName + ". Please choose another name.", QgsMessageBar.WARNING)
-        #     elif irrepFieldName == "":
-        #         qgis.utils.iface.messageBar().pushMessage("Irreplaceability field name blank", "The Restricted Range Richness name field is blank. Please choose a name.", QgsMessageBar.WARNING)
-        #     elif len(irrepFieldName) > 10:
-        #         qgis.utils.iface.messageBar().pushMessage("Invalid field name", "The Irreplaceability field name cannot be more than 10 characters long.", QgsMessageBar.WARNING)
-        #     else:
-        #         combSize, puSize = cluz_functions2.calcIrrepCombinationSize(setupObject, selectedTypeList)
-        #         cluz_functions2.produceIrrepField(setupObject, irrepFieldName, selectedTypeList, combSize, puSize)
-        #         cluz_display.displayGraduatedLayer(setupObject, irrepFieldName, "Irreplaceability score", 2) #2 is yellow to green QGIS legend code
-        #
-        #         qgis.utils.iface.messageBar().pushMessage("Irreplaceability results", "The fields have been successfully added to the planning unit layer attribute table.", QgsMessageBar.INFO, 3)
-        #         self.close()
+        if self.irrepBox.isChecked() and progressString == "details_fine":
+            irrepFieldName = self.irrepLineEdit.text()
+            if irrepFieldName in fieldNameList:
+                qgis.utils.iface.messageBar().pushMessage("Irreplaceability field name duplication", "The planning unit layer already contains a field named " + irrepFieldName + ". Please choose another name.", QgsMessageBar.WARNING)
+            elif irrepFieldName == "":
+                qgis.utils.iface.messageBar().pushMessage("Irreplaceability field name blank", "The Restricted Range Richness name field is blank. Please choose a name.", QgsMessageBar.WARNING)
+            elif len(irrepFieldName) > 10:
+                qgis.utils.iface.messageBar().pushMessage("Invalid field name", "The Irreplaceability field name cannot be more than 10 characters long.", QgsMessageBar.WARNING)
+            else:
+                combSize, puSize = cluz_functions2.calcIrrepCombinationSize(setupObject, selectedTypeList)
+                cluz_functions2.produceIrrepField(setupObject, irrepFieldName, selectedTypeList, combSize, puSize)
+                cluz_display.displayGraduatedLayer(setupObject, irrepFieldName, "Irreplaceability score", 2) #2 is yellow to green QGIS legend code
+
+                qgis.utils.iface.messageBar().pushMessage("Irreplaceability results", "The fields have been successfully added to the planning unit layer attribute table.", QgsMessageBar.INFO, 3)
+                self.close()
 
 class inputsDialog(QDialog, Ui_inputsDialog):
     def __init__(self, iface, setupObject):
@@ -284,19 +287,19 @@ class marxanDialog(QDialog, Ui_marxanDialog):
         self.missingLineEdit.setText(str(setupObject.targetProp))
         self.propLineEdit.setText(str(setupObject.startProp))
 
-        QObject.connect(self.runButton, SIGNAL("clicked()"), lambda: self.runMarxan(setupObject, targetsMetAction))
+        QObject.connect(self.startButton, SIGNAL("clicked()"), lambda: self.runMarxan(setupObject, targetsMetAction))
 
     def runMarxan(self, setupObject, targetsMetAction):
-        numIter = int(self.iterLineEdit.text())
-        numRun = int(self.runLineEdit.text())
+        numIterString = self.iterLineEdit.text()
+        numRunString = self.runLineEdit.text()
         outputName = str(self.outputLineEdit.text())
         setupObject.outputName = outputName
         if self.boundCheckBox.isChecked():
-            blmValue = float(self.boundLineEdit.text())
+            blmValueString = self.boundLineEdit.text()
         else:
-            blmValue = 0
-        missingProp = float(self.missingLineEdit.text())
-        initialProp = float(self.propLineEdit.text())
+            blmValueString = "0"
+        missingPropString = self.missingLineEdit.text()
+        initialPropString = self.propLineEdit.text()
 
         extraOutputsBool = self.extraCheckBox.isChecked()
 
@@ -305,39 +308,23 @@ class marxanDialog(QDialog, Ui_marxanDialog):
         else:
             numParallelAnalyses = 1
 
-        checkMarxanInputValuesBool = cluz_functions2.checkMarxanInputValuesBool(self, numIter, numRun, blmValue, missingProp, initialProp)
+        checkMarxanInputValuesBool = cluz_functions2.checkMarxanInputValuesBool(numIterString, numRunString, blmValueString, missingPropString, initialPropString, numParallelAnalyses)
         if checkMarxanInputValuesBool == True:
+            numIter = int(numIterString)
+            numRun = int(numRunString)
+            blmValue = float(blmValueString)
+            missingProp = float(missingPropString)
+            initialProp = float(initialPropString)
+
             cluz_functions2.createSpecDatFile(setupObject)
             setupObject = cluz_functions2.marxanUpdateSetupObject(setupObject, outputName, numIter, numRun, blmValue, extraOutputsBool, missingProp, initialProp)
             cluz_setup.updateClzSetupFile(setupObject)
             self.close()
 
             if numParallelAnalyses == 1:
-                marxanInputDict = cluz_functions2.marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool)
-                cluz_functions2.makeMarxanInputFile(setupObject, marxanInputDict)
-                marxanBatFileName = cluz_functions2.makeMarxanBatFile(setupObject)
-                subprocess.Popen([marxanBatFileName])
-                cluz_functions2.waitingForMarxan(setupObject, outputName)
-
-                bestOutputFile = setupObject.outputPath + os.sep + outputName + "_best.txt"
-                summedOutputFile = setupObject.outputPath + os.sep + outputName + "_ssoln.txt"
-
-            if numParallelAnalyses > 1:
-                parallelAnalysesDetailsList = cluz_functions2.makeParallelAnalysesDetailsList(numParallelAnalyses, outputName, numRun)
-                for (numRun, parallelOutputName) in parallelAnalysesDetailsList:
-                    marxanInputDict = cluz_functions2.marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool)
-                    cluz_functions2.makeMarxanInputFile(setupObject, marxanInputDict)
-                    marxanBatFileName = cluz_functions2.makeMarxanBatFile(setupObject)
-                    subprocess.Popen([marxanBatFileName])
-                    time.sleep(2)
-
-                cluz_functions2.waitingForParallelMarxan(setupObject, parallelAnalysesDetailsList)
-
-                cluz_functions2.makeBestParralelFile(setupObject, outputName, parallelAnalysesDetailsList)
-                bestOutputFile = setupObject.outputPath + os.sep + outputName + "_best.txt"
-
-                cluz_functions2.makeSummedParralelFile(setupObject, outputName, parallelAnalysesDetailsList)
-                summedOutputFile = setupObject.outputPath + os.sep + outputName + "_ssoln.txt"
+                bestOutputFile, summedOutputFile = launchSingleMarxanAnalysis(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool)
+            else:
+                bestOutputFile, summedOutputFile = launchMultiMarxanAnalysis(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool, numParallelAnalyses)
 
             cluz_functions2.addBestMarxanOutputToPUShapefile(setupObject, bestOutputFile, "Best")
             cluz_functions2.addSummedMarxanOutputToPUShapefile(setupObject, summedOutputFile, "SF_Score")
@@ -350,6 +337,36 @@ class marxanDialog(QDialog, Ui_marxanDialog):
             cluz_display.displayGraduatedLayer(setupObject, "SF_Score", summedLayerName, 1) #1 is SF legend code
 
             targetsMetAction.setEnabled(True)
+
+def launchSingleMarxanAnalysis(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool):
+    marxanInputDict = cluz_functions2.marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool)
+    cluz_functions2.makeMarxanInputFile(setupObject, marxanInputDict)
+    marxanBatFileName = cluz_functions2.makeMarxanBatFile(setupObject)
+    subprocess.Popen([marxanBatFileName])
+    cluz_functions2.waitingForMarxan(setupObject, outputName)
+    bestOutputFile = setupObject.outputPath + os.sep + outputName + "_best.txt"
+    summedOutputFile = setupObject.outputPath + os.sep + outputName + "_ssoln.txt"
+
+    return bestOutputFile, summedOutputFile
+
+def launchMultiMarxanAnalysis(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool, numParallelAnalyses):
+    parallelAnalysesDetailsList = cluz_functions2.makeParallelAnalysesDetailsList(numParallelAnalyses, outputName, numRun)
+    for (numRun, parallelOutputName) in parallelAnalysesDetailsList:
+        marxanInputDict = cluz_functions2.marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, parallelOutputName, extraOutputsBool)
+        cluz_functions2.makeMarxanInputFile(setupObject, marxanInputDict)
+        marxanBatFileName = cluz_functions2.makeMarxanBatFile(setupObject)
+        subprocess.Popen([marxanBatFileName])
+        time.sleep(2)
+
+    cluz_functions2.waitingForParallelMarxan(setupObject, parallelAnalysesDetailsList)
+
+    cluz_functions2.makeBestParralelFile(setupObject, outputName, parallelAnalysesDetailsList)
+    bestOutputFile = setupObject.outputPath + os.sep + outputName + "_best.txt"
+
+    cluz_functions2.makeSummedParralelFile(setupObject, outputName, parallelAnalysesDetailsList)
+    summedOutputFile = setupObject.outputPath + os.sep + outputName + "_ssoln.txt"
+
+    return bestOutputFile, summedOutputFile
 
 class loadDialog(QDialog, Ui_loadDialog):
     def __init__(self, iface, setupObject):
@@ -513,10 +530,6 @@ class calibrateDialog(QDialog, Ui_calibrateDialog):
         resultPathText = self.resultsLineEdit.text()
         checkBool = True
 
-        if os.path.isfile(resultPathText) is False:
-            qgis.utils.iface.messageBar().pushMessage("Incorrect pathname", "The specified pathname for the results file is invalid. Please choose another one", QgsMessageBar.WARNING)
-            checkBool = False
-
         if outputNameBase == "":
             qgis.utils.iface.messageBar().pushMessage("Incorrect output basename", "The specified basename for the Marxan output files is blank. Please choose another one", QgsMessageBar.WARNING)
             checkBool = False
@@ -597,28 +610,32 @@ class calibrateDialog(QDialog, Ui_calibrateDialog):
                 blmValueList = parameterValueList
 
         if checkBool == True:
-            missingPropList = [1.0] * numAnalyses
-            initialPropList = [0.2] * numAnalyses
-            calibrateResultsDict = {}
-            for analysisNumber in range(0, numAnalyses):
-                numIter = numIterList[analysisNumber]
-                numRun = numRunList[analysisNumber]
-                blmValue = blmValueList[analysisNumber]
-                missingProp = missingPropList[analysisNumber]
-                initialProp = initialPropList[analysisNumber]
-                outputName = outputNameBase + str(analysisNumber + 1)
-                extraOutputsBool = True
-                marxanInputDict = cluz_functions2.marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool)
-                cluz_functions2.makeMarxanInputFile(setupObject, marxanInputDict)
-                marxanBatFileName = cluz_functions2.makeMarxanBatFile(setupObject)
-                subprocess.Popen([marxanBatFileName])
-                cluz_functions2.waitingForMarxan(setupObject, outputName)
-
-                calibrateResultsDict[analysisNumber] = cluz_functions2.makeAnalysisResultsDict(setupObject, marxanInputDict)
-
-            cluz_functions2.makeCalibrateOutputFile(resultPathText, calibrateResultsDict)
-
+            runCalibrateMarxan(setupObject, numAnalyses, numRunList, numIterList, blmValueList, outputNameBase, resultPathText)
             self.close()
+
+def runCalibrateMarxan(setupObject, numAnalyses, numRunList, numIterList, blmValueList, outputNameBase, resultPathText):
+    missingPropList = [1.0] * numAnalyses
+    initialPropList = [0.2] * numAnalyses
+    calibrateResultsDict = {}
+    for analysisNumber in range(0, numAnalyses):
+        numIter = numIterList[analysisNumber]
+        numRun = numRunList[analysisNumber]
+        blmValue = blmValueList[analysisNumber]
+        missingProp = missingPropList[analysisNumber]
+        initialProp = initialPropList[analysisNumber]
+        outputName = outputNameBase + str(analysisNumber + 1)
+        extraOutputsBool = True
+        marxanInputDict = cluz_functions2.marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool)
+        cluz_functions2.makeMarxanInputFile(setupObject, marxanInputDict)
+        marxanBatFileName = cluz_functions2.makeMarxanBatFile(setupObject)
+        subprocess.Popen([marxanBatFileName])
+        time.sleep(2)
+        cluz_functions2.waitingForMarxan(setupObject, outputName)
+
+        calibrateResultsDict[analysisNumber] = cluz_functions2.makeAnalysisResultsDict(setupObject, marxanInputDict)
+
+    cluz_functions2.makeCalibrateOutputFile(resultPathText, calibrateResultsDict)
+
 
 class minpatchDialog(QDialog, Ui_minpatchDialog):
     def __init__(self, iface, setupObject):
@@ -635,11 +652,11 @@ class minpatchDialog(QDialog, Ui_minpatchDialog):
         if len(marxanFileList) > 0:
             self.fileListWidget.addItems(marxanFileList)
         else:
-            self.runButton.setEnabled(False)
+            self.startButton.setEnabled(False)
             qgis.utils.iface.messageBar().pushMessage("No files found", "The specified Marxan output folder does not contain any individual portfolio files that can be analysed in MinPatch.", QgsMessageBar.WARNING)
 
         QObject.connect(self.browseButton, SIGNAL("clicked()"), self.setminpatchDetailFile)
-        QObject.connect(self.runButton, SIGNAL("clicked()"), lambda: self.startMinPatch(setupObject))
+        QObject.connect(self.startButton, SIGNAL("clicked()"), lambda: self.startMinPatch(setupObject))
 
     def setminpatchDetailFile(self):
         minpatchDetailPathNameText = QFileDialog.getOpenFileName(self, 'Select MinPatch details file', '*.dat')
@@ -675,7 +692,7 @@ class minpatchDialog(QDialog, Ui_minpatchDialog):
                 detailsReader = csv.reader(f)
                 detailsHeader = next(detailsReader, None)  # skip the headers
             if detailsHeader == ["id", "area", "zone", "patch_area", "radius"]:
-                minpatchObject.detailsDatPathName = detailsDatPath
+                minpatchObject.detailsDatPath = detailsDatPath
             else:
                 qgis.utils.iface.messageBar().pushMessage("The specified MinPatch details file is incorrectly formatted. It must contain five fields named id, area ,zone ,patch_area and radius.", QgsMessageBar.WARNING)
                 runMinPatchBool = False
@@ -710,8 +727,9 @@ class minpatchDialog(QDialog, Ui_minpatchDialog):
         minpatchObject.removeBool = self.removeCheckBox.isChecked()
         minpatchObject.addBool = self.addCheckBox.isChecked()
         minpatchObject.whittleBool = self.whittleCheckBox.isChecked()
-        minpatchObject.marxanBool = self.marxanCheckBox.isChecked()
 
-        if runMinPatchBool == True:
-            minpatch_main.runMinPatch(setupObject, minpatchObject)
+        if runMinPatchBool:
+            minpatchDataDict, setupOKBool = cluz_mpsetup.makeMinpatchDataDict(setupObject, minpatchObject)
             self.close()
+            if setupOKBool:
+                cluz_mpmain.runMinPatch(setupObject, minpatchObject, minpatchDataDict)
