@@ -25,6 +25,7 @@ import csv
 import stats
 
 import cluz_mpfunctions
+import cluz_setup
 
 
 def makePatchStatsDict(patchDict, minpatchDataDict):
@@ -76,7 +77,10 @@ def printPatchListDict(patchNeighbListDict, zoneTypeDict, outputPath):
 
     for puID in patchNeighbListDict:
         lineValueList = copy.deepcopy(patchNeighbListDict[puID])
-        if len(lineValueList) > 0:
+        if len(lineValueList) == 1:
+             firstValue = lineValueList.pop(0)
+             lineStringList = [str(puID) + ':[' + str(firstValue) + ']']
+        elif len(lineValueList) > 1:
             lineStringList = [str(x) for x in lineValueList]
             firstValue = lineStringList.pop(0)
             firstValueString = str(puID) + ':[' + firstValue

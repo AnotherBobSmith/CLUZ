@@ -19,6 +19,8 @@
  ***************************************************************************/
 """
 
+from PyQt4.QtGui import *
+
 import qgis
 from qgis.core import *
 from qgis.gui import *
@@ -174,6 +176,8 @@ def changeBestToEarmarkedPUs(setupObject):
                 puLayer.changeAttributeValue(puRow, statusFieldOrder, "Earmarked")
                 selectedPUIDStatusDict[puID] = puStatus
         puLayer.commitChanges()
+        puLayer.triggerRepaint()
+        canvas.refresh()
 
         statusType = "Earmarked" # This works out the changes needed to update the Best PUs to Earmarked
         changeAbundDict = calcChangeAbundDict(setupObject, selectedPUIDStatusDict, statusType)
@@ -181,5 +185,57 @@ def changeBestToEarmarkedPUs(setupObject):
         cluz_setup.updateTargetCSVFromTargetDict(setupObject, setupObject.targetDict)
         qgis.utils.iface.messageBar().pushMessage("Process completed", "Planning units that were selected in the Best portfolio now have Earmarked status.", QgsMessageBar.INFO)
 
-        puLayer.triggerRepaint()
-        canvas.refresh()
+
+def makeIdentDict(targetDict, targetMetDict, puAbundDict):
+    identDict = {}
+    for featID in puAbundDict:
+        featAmount = puAbundDict[featID]
+        featName = targetDict[featID][0]
+        featTarget = targetDict[featID][3]
+        conTotal = targetDict[featID][4]
+        featTotal = targetDict[featID][5]
+        propOfTotal = featAmount / featTotal
+        pcOfTotal = propOfTotal * 100
+        pcOfTotalString = str(round(pcOfTotal, 2)) + " %"
+        if featTarget > 0:
+            if conTotal < featTarget:
+                targetMetDict[featID] = "Not met"
+            else:
+                targetMetDict[featID] = "Met"
+
+            propOfTarget = featAmount / featTarget
+            pcOfTarget = propOfTarget * 100
+            pcOfTargetString = str(round(pcOfTarget, 2)) + " %"
+
+            propTargetMet = targetDict[featID][4] / featTarget
+            pcTargetMet = propTargetMet * 100
+            pcTargetMetString = str(round(pcTargetMet, 2)) + " %"
+        else:
+            pcOfTargetString = "No target"
+            pcTargetMetString = "No target"
+            targetMetDict[featID] = "No target"
+
+        identDict[featID] = [str(featID), featName, str(featAmount), pcOfTotalString, str(featTarget), pcOfTargetString, pcTargetMetString]
+
+    return identDict
+
+
+def addIdenitfyDataToTableWidget(identifyTableWidget, targetMetDict, identDict):
+    featIDList = identDict.keys()
+    featIDList.sort()
+    for aRow in range(0, len(featIDList)):
+        identifyTableWidget.insertRow(aRow)
+        aID = featIDList[aRow]
+        featIdentifyList = identDict[aID]
+        for aCol in range(0, len(featIdentifyList)):
+            featValue = featIdentifyList[aCol]
+            featIDItem = QTableWidgetItem(featValue)
+            if aCol == 6:
+                targetMetStatus = targetMetDict[aID]
+                if targetMetStatus == "Met":
+                    featIDItem.setTextColor(QColor.fromRgb(0, 102, 51))
+                elif targetMetStatus == "Not met":
+                    featIDItem.setTextColor(QColor.fromRgb(255, 0, 0))
+                else:
+                    featIDItem.setTextColor(QColor.fromRgb(128, 128, 128))
+            identifyTableWidget.setItem(aRow, aCol, featIDItem)

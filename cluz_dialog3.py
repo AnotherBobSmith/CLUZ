@@ -263,8 +263,6 @@ class identifyDialog(QDialog, Ui_identifyDialog):
             self.targetMetDict = targetMetDict
             self.showIdentifyData()
 
-        # QObject.connect(self.copyButton, SIGNAL("clicked()"), lambda: self.copyIdentDictToClipboard(identDict))
-
     def makeIdentifyData(self):
         pntGeom = QgsGeometry.fromPoint(self.point)
 
@@ -285,37 +283,13 @@ class identifyDialog(QDialog, Ui_identifyDialog):
             for puFeature in puLayer.getFeatures(puRequest):
                 puAttributes = puFeature.attributes()
                 puID = puAttributes[puIdFieldOrder]
-                puAbundDict = self.abundPUKeyDict[puID]
-                for featID in puAbundDict:
-                    featAmount = puAbundDict[featID]
-                    featName = self.targetDict[featID][0]
-                    featTarget = self.targetDict[featID][3]
-                    conTotal = self.targetDict[featID][4]
-                    featTotal = self.targetDict[featID][5]
-                    propOfTotal = featAmount / featTotal
-                    pcOfTotal = propOfTotal * 100
-                    pcOfTotalString = str(round(pcOfTotal, 2)) + " %"
-                    if featTarget > 0:
-                        if conTotal < featTarget:
-                            targetMetDict[featID] = "Not met"
-                        else:
-                            targetMetDict[featID] = "Met"
-
-                        propOfTarget = featAmount / featTarget
-                        pcOfTarget = propOfTarget * 100
-                        pcOfTargetString = str(round(pcOfTarget, 2)) + " %"
-
-                        propTargetMet = self.targetDict[featID][4] / featTarget
-                        pcTargetMet = propTargetMet * 100
-                        pcTargetMetString = str(round(pcTargetMet, 2)) + " %"
-                    else:
-                        pcOfTargetString = "No target"
-                        pcTargetMetString = "No target"
-                        targetMetDict[featID] = "No target"
-
-                    identDict[featID] = [str(featID), featName, str(featAmount), pcOfTotalString, str(featTarget), pcOfTargetString, pcTargetMetString]
-
-                titleString = "Planning unit " + str(puID) + ": list of features"
+                try:
+                    puAbundDict = self.abundPUKeyDict[puID]
+                    identDict = cluz_functions3.makeIdentDict(self.targetDict, targetMetDict, puAbundDict)
+                    titleString = "Planning unit " + str(puID) + ": list of features"
+                except KeyError:
+                    identDict = {}
+                    titleString = "Planning unit " + str(puID) + ": does not contain any features"
                 self.setWindowTitle(titleString)
 
         return identDict, targetMetDict
@@ -323,25 +297,7 @@ class identifyDialog(QDialog, Ui_identifyDialog):
     def showIdentifyData(self):
         self.identifyTableWidget.clear()
         self.identifyTableWidget.setColumnCount(7)
-
-        featIDList = self.identDict.keys()
-        featIDList.sort()
-        for aRow in range(0, len(featIDList)):
-            self.identifyTableWidget.insertRow(aRow)
-            aID = featIDList[aRow]
-            featIdentifyList = self.identDict[aID]
-            for aCol in range(0, len(featIdentifyList)):
-                featValue = featIdentifyList[aCol]
-                featIDItem = QTableWidgetItem(featValue)
-                if aCol == 6:
-                    targetMetStatus = self.targetMetDict[aID]
-                    if targetMetStatus == "Met":
-                        featIDItem.setTextColor(QColor.fromRgb(0, 102, 51))
-                    elif targetMetStatus == "Not met":
-                        featIDItem.setTextColor(QColor.fromRgb(255, 0, 0))
-                    else:
-                        featIDItem.setTextColor(QColor.fromRgb(128, 128, 128))
-                self.identifyTableWidget.setItem(aRow, aCol, featIDItem)
+        cluz_functions3.addIdenitfyDataToTableWidget(self.identifyTableWidget, self.targetMetDict, self.identDict)
 
         headerList = ["ID ", "Name ", "Amount ", "As % of total ", "Target ", "As % of target ", "% of target currently met "]
         self.identifyTableWidget.setHorizontalHeaderLabels(headerList)

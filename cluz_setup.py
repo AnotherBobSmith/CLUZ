@@ -425,7 +425,6 @@ def makeAbundancePUKeyDict(setupObject):
     puvspr2FilePath = setupObject.inputPath + os.sep + "puvspr2.dat"
     progressMessage = "Reading in the puvspr2.dat data: records imported = 0"
     qgis.utils.iface.mainWindow().statusBar().showMessage(progressMessage)
-    progressCount = 0
     recordCount = 0
     with open(puvspr2FilePath, 'rb') as f:
         abundReader = csv.reader(f)
@@ -441,12 +440,7 @@ def makeAbundancePUKeyDict(setupObject):
                     puAbundDict = {}
                 puAbundDict[featID] = abundValue
                 abundPUKeyDict[puID] = puAbundDict
-                progressCount += 1
                 recordCount += 1
-                if progressCount == 100000:
-                    progressMessage = "Reading in the puvspr2.dat data: records imported = " + str(recordCount)
-                    qgis.utils.iface.mainWindow().statusBar().showMessage(progressMessage)
-                    progressCount = 0
             except ValueError:
                 abundPUKeyDictCorrect = False
 
@@ -458,6 +452,7 @@ def makeAbundancePUKeyDict(setupObject):
         abundPUKeyDict = "blank"
 
     return abundPUKeyDict
+
 
 def makePuvspr2DatFile(setupObject):
     qgis.utils.iface.messageBar().pushMessage("Processing files", "Making a new puvspr2.dat file.", QgsMessageBar.INFO, 2)
@@ -591,3 +586,10 @@ def returnPCTargetValueForTargetTable(targetDict, featID, featTarget, decPrec):
         pcTarget = -1
 
     return pcTarget
+
+def returnLowestUnusedFileNameNumber(dirPath, fileNameBase, extTypeText):
+    fileNameNumber = 1
+    while os.path.exists(dirPath + os.sep + fileNameBase + str(fileNameNumber) + extTypeText):
+        fileNameNumber += 1
+
+    return fileNameNumber

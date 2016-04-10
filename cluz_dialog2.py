@@ -71,12 +71,9 @@ class distributionDialog(QDialog, Ui_distributionDialog):
         self.featListWidget.addItems(featStringList)
 
     def setInitialShapeFilePath(self, setupObject):
-        baseName = os.path.dirname(setupObject.puPath)
-        distShapeFileName = "cluz_dist"
-        distShapeFileNameNumber = 1
-        while os.path.exists(baseName + os.sep + distShapeFileName + str(distShapeFileNameNumber) + ".shp"):
-            distShapeFileNameNumber += 1
-        distShapeFileFullPath = baseName + os.sep + distShapeFileName + str(distShapeFileNameNumber) + ".shp"
+        dirPath = os.path.dirname(setupObject.puPath)
+        distShapeFileNameNumber = cluz_setup.returnLowestUnusedFileNameNumber(dirPath, "cluz_dist", ".shp")
+        distShapeFileFullPath = dirPath + os.sep + "cluz_dist" + str(distShapeFileNameNumber) + ".shp"
         self.filePathlineEdit.setText(distShapeFileFullPath)
 
     def runDisplayDistributionMaps(self, setupObject):
@@ -666,12 +663,13 @@ class minpatchDialog(QDialog, Ui_minpatchDialog):
         marxanFileList = []
 
         fileList = os.listdir(setupObject.outputPath)
-        analysisList = []
-        for aFile in fileList:
-            if aFile.endswith('_best.txt'):
-                analysisList.append(aFile[0:-9])
+        analysisSet = set()
+        for fileNameString in fileList:
+            portfolioIdentifierString = fileNameString[-11:-9]
+            if portfolioIdentifierString == "_r":
+                analysisSet.add(fileNameString[0:-11])
 
-        for aPathName in analysisList:
+        for aPathName in analysisSet:
             runPath = aPathName + "_r"
             fileCount = 0
             for bFile in fileList:

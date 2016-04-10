@@ -51,12 +51,10 @@ class startDialog(QDialog, Ui_startDialog):
         QObject.connect(self.okButton, SIGNAL("clicked()"), lambda: self.returnStartBool(self, setupObject))
         QObject.connect(self.cancelButton, SIGNAL("clicked()"), self.closeStartDialog)
 
-
     def returnStartBool(self, dialog, setupObject):
-        statusCode = self.startButtonGroup.checkedId()
-        if statusCode == -2:
+        if self.openRadioButton.isChecked():
             setupObject.setupAction = "open"
-        if statusCode == -3:
+        elif self.createButton.isChecked():
             setupObject.setupAction = "new"
         self.close()
 
@@ -328,16 +326,16 @@ class convertVecDialog(QDialog, Ui_convertVecDialog):
     def convertLayersToAbundTable(self, setupObject):
         layerFactorCheck = True
         convFactorCheck = True
+        layerList = []
 
         idFieldName = self.idfieldLineEdit.text()
         selectedLayerNameList = [item.text() for item in self.selectListWidget.selectedItems()]
         if len(selectedLayerNameList) == 0:
             self.close()
-            QMessageBox.critical(None, "No layers selected", "No layers were selected.")
+            qgis.utils.iface.messageBar().pushMessage("No layers selected", "No layers were selected.", QgsMessageBar.WARNING)
             layerFactorCheck = False
         else:
             listMapItems = QgsMapLayerRegistry.instance().mapLayers()
-            layerList = []
             for nameCode, layer in listMapItems.iteritems():
                 layerName = layer.name()
                 if layerName in selectedLayerNameList:
@@ -348,47 +346,49 @@ class convertVecDialog(QDialog, Ui_convertVecDialog):
                 idFieldOrder = provider.fieldNameIndex(idFieldName)
                 if idFieldOrder == -1:
                     self.close()
-                    QMessageBox.critical(None, "Layer format error with " + aLayerName, "The specified ID field " + idFieldName + " is not in the layer " + aLayerName + ".")
+                    qgis.utils.iface.messageBar().pushMessage("Layer format error with " + aLayerName, "The specified ID field " + idFieldName + " is not in the layer " + aLayerName + ".", QgsMessageBar.WARNING)
                     layerFactorCheck = False
                 else:
                     idField = provider.fields().field(idFieldOrder)
                     idFieldType = idField.typeName()
                     if idFieldType != "Integer":
                         self.close()
-                        QMessageBox.critical(None, "Layer format error" + aLayerName, "The specified ID field " + idFieldName + " does not contain integer values.")
+                        qgis.utils.iface.messageBar().pushMessage("Layer format error" + aLayerName, "The specified ID field " + idFieldName + " does not contain integer values.", QgsMessageBar.WARNING)
                         layerFactorCheck = False
 
-        if layerFactorCheck == True:
+        if layerFactorCheck:
             convFactor = 1
             if self.userRadioButton.isChecked():
                 try:
                     convFactor = float(self.convLineEdit.text())
                     if convFactor <= 0:
                         self.close()
-                        QMessageBox.critical(None, "Incorrect conversion value", "The conversion value must be a number greater than 0.")
+                        qgis.utils.iface.messageBar().pushMessage("Incorrect conversion value", "The conversion value must be a number greater than 0.", QgsMessageBar.WARNING)
                         convFactorCheck = False
 
                 except:
                     self.close()
-                    QMessageBox.critical(None, "Incorrect conversion value", "The conversion value must be a number greater than 0.")
+                    qgis.utils.iface.messageBar().pushMessage("Incorrect conversion value", "The conversion value must be a number greater than 0.", QgsMessageBar.WARNING)
                     convFactorCheck = False
 
-        if layerFactorCheck == True and convFactorCheck == True:
-            addAbundDict, featIDList = cluz_functions1.makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor)
-            existingIDSet = set(featIDList).intersection(set(setupObject.targetDict.keys()))
+        if layerFactorCheck and convFactorCheck:
+            addAbundDict, addFeatIDList = cluz_functions1.makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor)
+            existingIDSet = set(addFeatIDList).intersection(set(setupObject.targetDict.keys()))
             if len(existingIDSet) > 0:
                 self.close()
                 listText = ""
                 for aID in existingIDSet:
                     listText += str(aID) + ", "
-                    finalListText = listText[0 : -2]
-                QMessageBox.critical(None, "Existing features", "The abundance table already contains features with ID values of " + finalListText + ". This process will terminate without adding the new values.")
+                    finalListText = listText[0: -2]
+                qgis.utils.iface.messageBar().pushMessage("Existing features", "The abundance table already contains features with ID values of " + finalListText + ". This process will terminate without adding the new values.", QgsMessageBar.WARNING)
             else:
+                if setupObject.abundPUKeyDict == "blank":
+                    setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
                 cluz_functions1.addFeaturesToPuvspr2File(setupObject, addAbundDict)
                 setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
                 cluz_setup.makeSporderDatFile(setupObject)
 
-                cluz_functions1.addFeaturesToTargetCsvFile(setupObject, addAbundDict, featIDList)
+                cluz_functions1.addFeaturesToTargetCsvFile(setupObject, addAbundDict, addFeatIDList)
                 setupObject.targetDict = cluz_setup.makeTargetDict(setupObject)
 
                 self.close()

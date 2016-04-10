@@ -88,17 +88,19 @@ def updateConTotFieldsTargetDict(setupObject, newConTotDict):
 
 def makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor):
     addAbundDict = {}
-    featIDSet = set()
+    addFeatIDSet = set()
     decPrec = setupObject.decimalPlaces
 
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
 
     layerNumber = 1
     for aLayer in layerList:
-        qgis.utils.iface.mainWindow().statusBar().showMessage("Processing layer " + str(layerNumber) + ".")
         layerGeomType = aLayer.geometryType()
+        qgis.utils.iface.mainWindow().statusBar().showMessage("Intersecting layer " + str(layerNumber) + "...")
 
-        tempIntersectLayer = os.path.dirname(setupObject.puPath) + os.sep + "temp_int.shp"
+        dirPath = os.path.dirname(setupObject.puPath)
+        intersectShapeFileNameNumber = cluz_setup.returnLowestUnusedFileNameNumber(dirPath, "temp_int", ".shp")
+        tempIntersectLayer = dirPath + os.sep + "temp_int" + str(intersectShapeFileNameNumber) + ".shp"
         overlayAnalyzer = QgsOverlayAnalyzer()
         overlayAnalyzer.intersection(puLayer, aLayer, tempIntersectLayer)
         outputLayer = QgsVectorLayer(tempIntersectLayer, "Temp", "ogr")
@@ -107,18 +109,26 @@ def makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor):
         outputIDField = outputLayer.fieldNameIndex('Unit_ID')
         outputFeatIDField = outputLayer.fieldNameIndex(idFieldName)
 
+        if layerGeomType == 1:
+            lineBool = True
+            polyBool = False
+        elif layerGeomType == 2:
+            lineBool = False
+            polyBool = True
+
+        qgis.utils.iface.mainWindow().statusBar().showMessage("Calculating data from layer " + str(layerNumber) + "...")
         for outputFeature in outputFeatures:
             outputAttributes = outputFeature.attributes()
             unitID = outputAttributes[outputIDField]
             featID = outputAttributes[outputFeatIDField]
-            featIDSet.add(featID)
+            addFeatIDSet.add(featID)
 
             #Produce intersect of lines
-            if layerGeomType == 1:
+            if lineBool:
                 finalShapeAmount = calcFeatLineLengthInPU(outputFeature, convFactor, decPrec)
 
             #Produce intersect of polygons
-            if layerGeomType == 2:
+            if polyBool:
                 finalShapeAmount = calcFeatPolygonAreaInPU(outputFeature, convFactor, decPrec)
 
             if finalShapeAmount > 0:
@@ -135,9 +145,10 @@ def makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor):
                 addAbundDict[unitID] = puAddAbundDict
         layerNumber += 1
 
-    featIDList = list(featIDSet)
-    featIDList.sort()
-    return addAbundDict, featIDList
+    qgis.utils.iface.mainWindow().statusBar().showMessage("")
+    addFeatIDList = list(addFeatIDSet)
+    addFeatIDList.sort()
+    return addAbundDict, addFeatIDList
 
 def calcFeatLineLengthInPU(outputFeature, convFactor, decPrec):
     outputGeom = outputFeature.geometry()
@@ -208,90 +219,41 @@ def makeAddAbundDict(csvFilePath, featHeaderDict, fileHeaderList, unitIDFieldNam
 
 def addAbundDictToAbundPUKeyDict(setupObject, addAbundDict):
     abundPUKeyDict = setupObject.abundPUKeyDict
-    for aPU in addAbundDict:
-        puAddAbundDict = addAbundDict[aPU]
+    for puID in addAbundDict:
+        puAddAbundDict = addAbundDict[puID]
         try:
-            puAbundDict = setupObject.abundPUKeyDict[aPU]
+            puAbundDict = setupObject.abundPUKeyDict[puID]
         except KeyError:
             puAbundDict = {}
         for aFeat in puAddAbundDict:
             aAmount = puAddAbundDict[aFeat]
             puAbundDict[aFeat] = aAmount
 
-        abundPUKeyDict[aPU] = puAbundDict
+        abundPUKeyDict[puID] = puAbundDict
 
     return abundPUKeyDict
 
 def addFeaturesToPuvspr2File(setupObject, addAbundDict):
-    addUnitIDSet = set(addAbundDict.keys())
+    for puID in addAbundDict:
+        puAddAbundDict = addAbundDict[puID]
+        try:
+            puAbundDict = setupObject.abundPUKeyDict[puID]
+        except KeyError:
+            puAbundDict = {}
+        for featID in puAddAbundDict:
+            puAbundDict[featID] = puAddAbundDict[featID]
+        setupObject.abundPUKeyDict[puID] = puAbundDict
 
-    puvspr2Path = setupObject.inputPath + os.sep + "puvspr2.dat"
-    tempPuvspr2Path = cluz_setup.returnTempPathName(puvspr2Path, "dat")
-    tempPuvspr2File = open(tempPuvspr2Path, "wb")
-    writer = csv.writer(tempPuvspr2File)
-    writer.writerow(["species", "pu", "amount"])
+    cluz_setup.makePuvspr2DatFile(setupObject)
 
-    with open(puvspr2Path, 'rb') as f:
-        reader = csv.reader(f)
-        reader.next()
-        prevUnitID = "AAA" # Used to check whether PU ID is different to previous row in puvspr2.dat
-        unitIDAbundList = []
-        for row in reader:
-            featID = int(row[0])
-            unitID = int(row[1])
-            featAmount = float(row[2])
-
-            if unitID != prevUnitID and len(unitIDAbundList) != 0:
-                puAddAbundDict = addAbundDict[prevUnitID]
-                for aFeat in puAddAbundDict:
-                    aAmount = puAddAbundDict[aFeat]
-                    unitIDAbundList.append([aFeat, prevUnitID, aAmount])
-                unitIDAbundList.sort()
-                for aList in unitIDAbundList:
-                    writer.writerow(aList)
-                unitIDAbundList = []
-
-            if unitID not in addUnitIDSet:
-                writer.writerow(row)
-            else:
-                unitIDAbundList.append([featID, unitID, featAmount])
-
-            prevUnitID = unitID
-
-    tempPuvspr2File.close()
-    os.remove(puvspr2Path)
-    os.rename(tempPuvspr2Path, puvspr2Path)
 
 def addFeaturesToTargetCsvFile(setupObject, addAbundDict, featIDList):
     tempTargetPath = cluz_setup.returnTempPathName(setupObject.targetPath, "csv")
     tempTargetFile = open(tempTargetPath, "wb")
     writer = csv.writer(tempTargetFile)
 
-    addTargetDict = {}
-    for aFeatID in featIDList:
-        addTargetDict[aFeatID] = (0, 0) #[Con amount, total amount]
-
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
-    puFeatures = puLayer.getFeatures()
-    unitIDField = puLayer.fieldNameIndex('Unit_ID')
-    unitStatusField = puLayer.fieldNameIndex('Status')
-
-    for puFeature in puFeatures:
-        puAttributes = puFeature.attributes()
-        unitID = puAttributes[unitIDField]
-        unitStatus = puAttributes[unitStatusField]
-
-        for bFeatID in featIDList:
-            try:
-                puAddAbundDict = addAbundDict[unitID]
-                featAmount = puAddAbundDict[bFeatID]
-                featCon, featTotal = addTargetDict[bFeatID]
-                featTotal += featAmount
-                if unitStatus == "Conserved" or unitStatus == "Earmarked":
-                    featCon += featAmount
-                addTargetDict[bFeatID] = (featCon, featTotal)
-            except KeyError:
-                pass
+    addTargetDict = makeAddTargetDict(puLayer, addAbundDict, featIDList)
 
     with open(setupObject.targetPath, 'rb') as f:
         reader = csv.reader(f)
@@ -300,14 +262,43 @@ def addFeaturesToTargetCsvFile(setupObject, addAbundDict, featIDList):
 
         addTargetList = addTargetDict.keys()
         addTargetList.sort()
-        for cFeatID in addTargetList:
-            (featCon, featTotal) = addTargetDict[cFeatID]
-            row = [str(cFeatID), "blank", "0", "0", "0", str(featCon), str(featTotal), "-1"]
+        for featID in addTargetList:
+            (featCon, featTotal) = addTargetDict[featID]
+            row = [str(featID), "blank", "0", "0", "0", str(featCon), str(featTotal), "-1"]
             writer.writerow(row)
 
     tempTargetFile.close()
     os.remove(setupObject.targetPath)
     os.rename(tempTargetPath, setupObject.targetPath)
+
+
+def makeAddTargetDict(puLayer, addAbundDict, featIDList):
+    puFeatures = puLayer.getFeatures()
+    unitIDField = puLayer.fieldNameIndex('Unit_ID')
+    unitStatusField = puLayer.fieldNameIndex('Status')
+
+    addTargetDict = {}
+    for featID in featIDList:
+        addTargetDict[featID] = (0, 0) #[Con amount, total amount]
+
+    for puFeature in puFeatures:
+        puAttributes = puFeature.attributes()
+        puID = puAttributes[unitIDField]
+        puStatus = puAttributes[unitStatusField]
+
+        for bFeatID in featIDList:
+            try:
+                puAddAbundDict = addAbundDict[puID]
+                featAmount = puAddAbundDict[bFeatID]
+                featCon, featTotal = addTargetDict[bFeatID]
+                featTotal += featAmount
+                if puStatus == "Conserved" or puStatus == "Earmarked":
+                    featCon += featAmount
+                addTargetDict[bFeatID] = (featCon, featTotal)
+            except KeyError:
+                pass
+
+    return addTargetDict
 
 def remFeaturesFromPuvspr2(setupObject, selectedFeatIDSet):
     puvspr2Path = setupObject.inputPath + os.sep + "puvspr2.dat"

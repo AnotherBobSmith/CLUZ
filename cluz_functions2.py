@@ -568,16 +568,8 @@ def makeSummedParralelFile(setupObject, mainOutputName, parallelAnalysesDetailsL
         writer.writerow([str(aPUID), str(summedDict[aPUID])])
 
 ####################################################################http://www.opengis.ch/2015/04/29/performance-for-mass-updating-features-on-layers/
-def addBestMarxanOutputToPUShapefile(setupObject, bestOutputFile, bestFieldName):
-    bestDict = {}
-    with open(bestOutputFile, 'rb') as f:
-        reader = csv.reader(f)
-        next(reader, None)  # skip the headers
-        for row in reader:
-            puID = int(float(row[0]))
-            bestBool = int(float(row[1]))
-            bestDict[puID] = bestBool
-
+def addBestMarxanOutputToPUShapefile(setupObject, bestOutputFilePath, bestFieldName):
+    bestDict = makeBestScoresDict(bestOutputFilePath)
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     provider = puLayer.dataProvider()
     idFieldOrder = provider.fieldNameIndex("Unit_ID")
@@ -607,16 +599,21 @@ def addBestMarxanOutputToPUShapefile(setupObject, bestOutputFile, bestFieldName)
     puLayer.commitChanges()
 
 
-####################################################################http://www.opengis.ch/2015/04/29/performance-for-mass-updating-features-on-layers/
-def addSummedMarxanOutputToPUShapefile(setupObject, summedOutputFile, summedFieldName):
-    summedDict = {}
-    with open(summedOutputFile, 'rb') as f:
+def makeBestScoresDict(bestOutputFilePath):
+    bestScoresDict = {}
+    with open(bestOutputFilePath, 'rb') as f:
         reader = csv.reader(f)
         next(reader, None)  # skip the headers
         for row in reader:
             puID = int(float(row[0]))
-            summedScore = int(float(row[1]))
-            summedDict[puID] = summedScore
+            bestBool = int(float(row[1]))
+            bestScoresDict[puID] = bestBool
+
+    return bestScoresDict
+
+####################################################################http://www.opengis.ch/2015/04/29/performance-for-mass-updating-features-on-layers/
+def addSummedMarxanOutputToPUShapefile(setupObject, summedOutputFilePath, summedFieldName):
+    summedScoreDict = makeSummedScoresDict(summedOutputFilePath)
 
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     provider = puLayer.dataProvider()
@@ -639,10 +636,23 @@ def addSummedMarxanOutputToPUShapefile(setupObject, summedOutputFile, summedFiel
         if puStatus == "Conserved":
             summedScore = -99
         else:
-            summedScore = summedDict[puID]
+            summedScore = summedScoreDict[puID]
         puLayer.changeAttributeValue(puRow, summedFieldOrder, summedScore, True)
     puLayer.commitChanges()
     puLayer.reload() #DOES THIS WORK????????????????????????????????????????????????????????????????
+
+
+def makeSummedScoresDict(summedOutputFile):
+    summedScoreDict = {}
+    with open(summedOutputFile, 'rb') as f:
+        reader = csv.reader(f)
+        next(reader, None)  # skip the headers
+        for row in reader:
+            puID = int(float(row[0]))
+            summedScore = int(float(row[1]))
+            summedScoreDict[puID] = summedScore
+
+    return summedScoreDict
 
 def produceCountField(setupObject, countFieldName, selectedTypeList):
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
