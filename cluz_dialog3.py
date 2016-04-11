@@ -212,9 +212,14 @@ class changeStatusDialog(QDialog, Ui_ChangeStatusDialog):
         QObject.connect(self.closeButton, SIGNAL("clicked()"), lambda: self.closeStatusDialog(setupObject))
 
     def changeStatus(self, setupObject):
-        statusDict = {-2: "Available",-3: "Earmarked",-4: "Conserved",-5: "Excluded"}
-        statusCode = self.statusButtonGroup.checkedId() #get the radio button that was selected
-        statusType = statusDict[statusCode]
+        if self.availableButton.isChecked():
+            statusType = "Available"
+        elif self.earmarkedButton.isChecked():
+            statusType = "Earmarked"
+        elif self.conservedButton.isChecked():
+            statusType = "Conserved"
+        elif self.excludedButton.isChecked():
+            statusType = "Excluded"
 
         changeLockedPUsBool = self.changeCheckBox.isChecked()
 
