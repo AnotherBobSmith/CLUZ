@@ -73,16 +73,7 @@ class setupDialog(QDialog, Ui_setupDialog):
         self.outputLineEdit.setText(setupObject.outputPath)
         self.puLineEdit.setText(setupObject.puPath)
         self.targLineEdit.setText(setupObject.targetPath)
-
-        numberList = ["0", "1", "2", "3", "4", "5"]
-        self.precComboBox.addItems(numberList)
-        numberList = [0, 1, 2, 3, 4, 5]
-        precValue = setupObject.decimalPlaces
-        if precValue > 5:
-            qgis.utils.iface.messageBar().pushMessage("Decimal precision value problem", "The number of decimal places specified in the CLUZ setup file cannot be more than 5. The specified value has been changed to 5.", QgsMessageBar.WARNING)
-            precValue = 5
-        indexValue = numberList.index(precValue)
-        self.precComboBox.setCurrentIndex(indexValue)
+        self.setPrecValue(setupObject.decimalPlaces)
 
         if os.path.isfile(setupObject.setupPath):
             setupPathText = os.path.abspath(setupObject.setupPath)
@@ -151,16 +142,18 @@ class setupDialog(QDialog, Ui_setupDialog):
                 self.outputLineEdit.setText(setupObject.outputPath)
                 self.puLineEdit.setText(setupObject.puPath)
                 self.targLineEdit.setText(setupObject.targetPath)
+                self.setPrecValue(setupObject.decimalPlaces)
 
-                numberList = [0, 1, 2, 3, 4, 5]
-                precValue = setupObject.decimalPlaces
-                if precValue > 5:
-                    qgis.utils.iface.messageBar().pushMessage("Decimal precision value problem", "The number of decimal places specified in the CLUZ setup file cannot be more than 5. The specified value has been changed to 5.", QgsMessageBar.WARNING)
-                    precValue = 5
-                indexValue = numberList.index(precValue)
-                self.precComboBox.setCurrentIndex(indexValue)
+                cluz_setup.checkAddPULayer(setupObject)
 
-                cluz_setup.checkAddPlanningUnit(setupObject)
+    def setPrecValue(self, precValue):
+        self.precComboBox.addItems(["0", "1", "2", "3", "4", "5"])
+        numberList = [0, 1, 2, 3, 4, 5]
+        if precValue > 5:
+            qgis.utils.iface.messageBar().pushMessage("Decimal precision value problem", "The number of decimal places specified in the CLUZ setup file cannot be more than 5. The specified value has been changed to 5.", QgsMessageBar.WARNING)
+            precValue = 5
+        indexValue = numberList.index(precValue)
+        self.precComboBox.setCurrentIndex(indexValue)
 
     def saveSetupFile(self, setupObject):
         setupFilePath = setupObject.setupPath
@@ -183,7 +176,7 @@ class setupDialog(QDialog, Ui_setupDialog):
                 cluz_setup.updateClzSetupFile(setupObject)
                 setupPathLabelText = "Setup file location: " + str(setupFilePath)
                 self.setupPathLabel.setText(setupPathLabelText)
-                cluz_setup.checkAddPlanningUnit(setupObject)
+                cluz_setup.checkAddPULayer(setupObject)
 
         elif setupFilePath == "blank":
             qgis.utils.iface.messageBar().pushMessage("No CLUZ setup file name", "The CLUZ setup file name has not been set. Please use the Save As... option instead.", QgsMessageBar.WARNING)
@@ -209,7 +202,7 @@ class setupDialog(QDialog, Ui_setupDialog):
                 cluz_setup.updateClzSetupFile(setupObject)
                 setupPathLabelText = "Setup file location: " + str(newSetupFilePath)
                 self.setupPathLabel.setText(setupPathLabelText)
-                cluz_setup.checkAddPlanningUnit(setupObject)
+                cluz_setup.checkAddPULayer(setupObject)
 
         else:
             qgis.utils.iface.messageBar().pushMessage("CLUZ setup file name error", "The current CLUZ setup file path is incorrect.", QgsMessageBar.WARNING)
@@ -351,7 +344,7 @@ class convertVecDialog(QDialog, Ui_convertVecDialog):
                 else:
                     idField = provider.fields().field(idFieldOrder)
                     idFieldType = idField.typeName()
-                    if idFieldType != "Integer":
+                    if idFieldType != "Integer" and idFieldType != "Integer64":
                         self.close()
                         qgis.utils.iface.messageBar().pushMessage("Layer format error" + aLayerName, "The specified ID field " + idFieldName + " does not contain integer values.", QgsMessageBar.WARNING)
                         layerFactorCheck = False
@@ -412,11 +405,14 @@ class convertCsvDialog(QDialog, Ui_convertCsvDialog):
         csvPathNameText = QFileDialog.getOpenFileName(self, 'Select CSV file', '*.csv')
         if csvPathNameText != "":
             self.csvFileLineEdit.setText(csvPathNameText)
-            csvFile =  open(csvPathNameText, 'rb')
-            reader = csv.reader(csvFile)
-            fileHeaderList = reader.next()
-            self.idfieldComboBox.addItems(fileHeaderList)
-            self.idfieldComboBox.setEnabled(True)
+            csvFile = open(csvPathNameText, 'rb')
+            try:
+                reader = csv.reader(csvFile)
+                fileHeaderList = reader.next()
+                self.idfieldComboBox.addItems(fileHeaderList)
+                self.idfieldComboBox.setEnabled(True)
+            except:
+                qgis.utils.iface.messageBar().pushMessage("Input file incorrectly formatted", "CLUZ cannot read this file. Please check it is a csv file with commas between fields and each row representing a table line", QgsMessageBar.WARNING)
 
     def convertCSVToAbundTable(self, setupObject):
         layerFactorCheck = True

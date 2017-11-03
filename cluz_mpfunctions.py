@@ -23,6 +23,7 @@ import qgis
 from qgis.core import *
 from qgis.gui import *
 
+import cluz_setup
 
 def puStatusDoesNotEqualExcluded(unitDictionary, puID):
     notExcludedBool = True
@@ -41,51 +42,56 @@ def puStatusIsEarmarkedOrConserved(unitDictionary, puID):
 def makePatchDict(unitDict, minpatchDataDictionary):
     areaDict = minpatchDataDictionary["areaDictionary"]
     boundaryMatrixDict = minpatchDataDictionary["boundaryMatrixDictionary"]
-    patchDict = {}
+    patchDict = dict()
     patchID = 1
-    runningPortfolioDict = makePortfolioDict(unitDict, areaDict) #To contain data on all PUs in portfolio, then each PU will be removed & assiged to a patch
+    runningPortfolioPUIDSet = makePortfolioPUIDSet(unitDict) #To contain data on all PUs in portfolio, then each PU will be removed & assiged to a patch
 
-    while len(runningPortfolioDict) > 0:
-        patchSize, unitCount, patchList = makePatchDictDetails(boundaryMatrixDict, areaDict, runningPortfolioDict)
-        patchDict[patchID] = [patchSize, unitCount, patchList]
+    while len(runningPortfolioPUIDSet) > 0:
+        patchPUIDSet = makePatchPUIDSet(boundaryMatrixDict, runningPortfolioPUIDSet, patchID)
+        runningPortfolioPUIDSet = runningPortfolioPUIDSet.difference(patchPUIDSet)
+        patchPUIDList = list(patchPUIDSet)
+        patchPUIDList.sort()
+        patchArea = returnPatchArea(areaDict, patchPUIDList)
+        patchDict[patchID] = [patchArea, len(patchPUIDList), patchPUIDList]
         patchID += 1
 
     return patchDict
 
-def makePatchDictDetails(boundaryMatrixDict, areaDict, runningPortfolioDict):
-    loopUnitDict = {}
-    firstPUID = runningPortfolioDict.keys()[0]
-    firstUnitArea = runningPortfolioDict[firstPUID]
-    loopUnitDict[firstPUID] = firstUnitArea
-    patchList = []
-    patchSize = 0
-    unitCount = 0
 
-    while len(loopUnitDict) > 0:
-        aUnitItem = loopUnitDict.popitem()
-        aUnitID, aUnitArea = aUnitItem
-
-        del runningPortfolioDict[aUnitID]
-        patchList.append(aUnitID)
-        patchSize += aUnitArea
-        unitCount += 1
-        neighbList = boundaryMatrixDict[aUnitID]
-        if len(neighbList) > 0:
-            for neighbUnit in neighbList:
-                if neighbUnit in runningPortfolioDict:
-                    neighbArea = areaDict[neighbUnit]
-                    loopUnitDict[neighbUnit] = neighbArea
-
-    return patchSize, unitCount, patchList
-
-def makePortfolioDict(unitDict, areaDict):
-    portfolioDict = {}
+def makePortfolioPUIDSet(unitDict):
+    portfolioPUIDSet = set()
     for puID in unitDict:
         if puStatusIsEarmarkedOrConserved(unitDict, puID):
-            unitArea = areaDict[puID]
-            portfolioDict[puID] = unitArea
+            portfolioPUIDSet.add(puID)
 
-    return portfolioDict
+    return portfolioPUIDSet
+
+
+def makePatchPUIDSet(boundaryMatrixDict, runningPortfolioPUIDSet, patchID):
+    loopUnitSet = set()
+    patchPUIDSet = set()
+    initialPUID = list(runningPortfolioPUIDSet)[0]
+    loopUnitSet.add(initialPUID)
+
+    while len(loopUnitSet) > 0:
+        puID = loopUnitSet.pop()
+        patchPUIDSet.add(puID)
+        neighbList = boundaryMatrixDict[puID]
+        if len(neighbList) > 0:
+            for neighbPUID in neighbList:
+                if neighbPUID in runningPortfolioPUIDSet and neighbPUID not in patchPUIDSet:
+                    loopUnitSet.add(neighbPUID)
+
+    return patchPUIDSet
+
+
+def returnPatchArea(areaDict, patchPUIDList):
+    patchArea = 0
+    for puID in patchPUIDList:
+        patchArea += areaDict[puID]
+
+    return patchArea
+
 
 def remSmallPatchesFromUnitDict(minpatchDataDict, unitDict, patchDict):
     preMarxanUnitDict = minpatchDataDict["initialUnitDictionary"]
@@ -124,6 +130,7 @@ def calcPatchSizeThreshold(zoneDict, patchDict, patchID):
 
     return patchSizeThreshold
 
+
 def addPatches(minpatchDataDict, runningUnitDict):
     continueBool = True
     featAmountConsDict = makeFeatAmountConsDict(minpatchDataDict, runningUnitDict)
@@ -137,7 +144,8 @@ def addPatches(minpatchDataDict, runningUnitDict):
         puID = returnBestPU(puPatchScoreDict)
 
         if puID == -1:
-            qgis.utils.iface.messageBar().pushMessage("Target error: ", "Targets cannot be met. At least one target is higher than the amount found in the planning region, so MinPatch has been terminated.", QgsMessageBar.WARNING)
+            featIDListString = makeFeatureIDListOfUnmeetableTargetsString(unmetTargetIDSet)
+            qgis.utils.iface.messageBar().pushMessage("Target error: ", "Targets for the following features cannot be met: " + featIDListString +". This occurs when there is not enough of the relevant features found in patches with the specified minimum area. MinPatch has been terminated.", QgsMessageBar.WARNING)
             continueBool = False
             break
 
@@ -149,6 +157,17 @@ def addPatches(minpatchDataDict, runningUnitDict):
         unmetTargetIDSet = makeUnmetTargetIDSet(featAmountConsDict, minpatchDataDict)
 
     return runningUnitDict, continueBool
+
+
+def makeFeatureIDListOfUnmeetableTargetsString(unmetTargetIDSet):
+    featIDListString = ""
+    for featID in unmetTargetIDSet:
+        featIDListString = featIDListString + str(featID) + ", "
+
+    finalFeatIDListString = featIDListString[0:-2]
+
+    return finalFeatIDListString
+
 
 def makeFeatAmountConsDict(minpatchDataDict, unitDict):
     targetDict = minpatchDataDict["targetDictionary"]

@@ -30,7 +30,7 @@ import cluz_mpoutputs
 import cluz_mpsetup
 import cluz_functions2
 import cluz_display
-
+import cluz_setup
 
 def runMinPatch(setupObject, minpatchObject, minpatchDataDict):
     marxanNameString = minpatchObject.marxanFileName + "_r"
@@ -129,7 +129,7 @@ def runMinPatch(setupObject, minpatchObject, minpatchDataDict):
 def createRunningUnitDictionary(minpatchDataDict, marxanSolLocationString):
     preMarxanUnitDict = minpatchDataDict["initialUnitDictionary"]
     initUnitDict = copy.deepcopy(preMarxanUnitDict)
-    aMarxanSolDict = cluz_mpsetup.makeMarxanSolDict(marxanSolLocationString)
+    marxanSolDictOKBool, aMarxanSolDict = cluz_mpsetup.makeMarxanSolDict(marxanSolLocationString) #marxanSolDictOKBool not used here
     runningUnitDict = makeStartUnitDict(initUnitDict, aMarxanSolDict)
 
     return runningUnitDict
@@ -247,26 +247,7 @@ def makeTotalTargetCost(amountConservedDictionary, targetDictionary):
     return totalTargetCost
 
 def makeBoundCosts(minpatchDataDict, boundaryMatrixDict, puDict):
-    totalBoundLength = 0
-
-    for id1Value in boundaryMatrixDict:
-        puBoundDict = boundaryMatrixDict[id1Value]
-        for id2Value in puBoundDict:
-            if id2Value >= id1Value:
-                boundValue = puBoundDict[id2Value]
-                conCount = 0
-                id1StatusValue = puDict[id1Value][1]
-                id2StatusValue = puDict[id2Value][1]
-
-                if id1StatusValue == 1 or id1StatusValue == 2:
-                    conCount += 1
-                if id2StatusValue == 1 or id2StatusValue == 2:
-                    conCount += 1
-                if conCount == 1:
-                    totalBoundLength += boundValue
-                #Allow for external edges
-                if conCount == 2 and id1Value == id2Value:
-                    totalBoundLength += boundValue
+    totalBoundLength = cluz_functions2.calcTotalBoundLength(boundaryMatrixDict, puDict)
 
     BLMvalue = minpatchDataDict["bound_cost"]
     totalBoundaryCost = totalBoundLength * BLMvalue

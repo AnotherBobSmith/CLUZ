@@ -30,6 +30,7 @@ import csv
 
 import cluz_mpfunctions
 import cluz_mpoutputs
+import cluz_setup
 
 
 def makeMinpatchDataDict(setupObject, minpatchObject):
@@ -52,7 +53,7 @@ def makeMinpatchDataDict(setupObject, minpatchObject):
     boundMatrixDict = makeBoundMatrixDict(inputPath + os.sep + 'bound.dat', unitDict)
     minpatchDataDict["boundaryMatrixDictionary"] = boundMatrixDict
 
-    areaDictionary, zoneDict, zoneTypeDict = makeMPDicts(minpatchObject)
+    areaDictionary, zoneDict, zoneTypeDict = makeMPDicts(inputPath + os.sep + 'minpatch.dat')
     minpatchDataDict["areaDictionary"] = areaDictionary
     minpatchDataDict["zoneDictionary"] = zoneDict
     minpatchDataDict["zoneTypeDictionary"] = zoneTypeDict
@@ -61,7 +62,7 @@ def makeMinpatchDataDict(setupObject, minpatchObject):
     else:
         minpatchObject.zonestatsBool = False
 
-    if zoneDict.keys() <> unitDict.keys():
+    if zoneDict.keys() != unitDict.keys():
         qgis.utils.iface.messageBar().pushMessage("Input files error: ", "The planning unit ID values in the unit.dat and MinPatch details file do not match, so MinPatch has been terminated.", QgsMessageBar.WARNING)
         setupOKBool = False
 
@@ -78,23 +79,42 @@ def makeMinpatchDataDict(setupObject, minpatchObject):
         qgis.utils.iface.mainWindow().statusBar().showMessage("")
         setupOKBool = False
 
+    if setupOKBool and outputFilesCannotBeSaved(filesToBeCreatedList):
+        qgis.utils.iface.messageBar().pushMessage("Output files error: ", "At least one of the required output files cannot be created. Please check that you have permission to write files in the specified output folder and that a file with the same name is not already open.", QgsMessageBar.WARNING)
+        qgis.utils.iface.mainWindow().statusBar().showMessage("")
+        setupOKBool = False
+
     if setupOKBool:
         makeNewPatchPUIDFilesBool = checkPatchPUIDFile(setupObject, minpatchDataDict)
         if makeNewPatchPUIDFilesBool:
-            qgis.utils.iface.mainWindow().statusBar().showMessage("Creating MinPatch patch input files...")
-            createPatchPUIDTextFile(setupObject, minpatchDataDict)
+            if radiusValuesVeryHigh(minpatchDataDict):
+                responseValue = QMessageBox.warning(None, "Radius values very high", "At least one of the radius values specified in the MinPatch details file is more than 25% of the approximate height and/or width of the planning region. This could produce very large patches and make MinPatch run very slowly. Is that OK?", QMessageBox.Ok, QMessageBox.Cancel)
+                if responseValue != 1024:
+                    qgis.utils.iface.mainWindow().statusBar().showMessage("")
+                    setupOKBool = False
+            if setupOKBool:
+                qgis.utils.iface.mainWindow().statusBar().showMessage("Creating MinPatch patch input files...")
+                createPatchPUIDTextFile(setupObject, minpatchDataDict)
 
+    if setupOKBool:
         qgis.utils.iface.mainWindow().statusBar().showMessage("Importing MinPatch patch input files...")
         addPatchPUIDDict = makePatchPUIDDict(setupObject, minpatchDataDict)
         minpatchDataDict["addPatchPUIDDictionary"] = addPatchPUIDDict
-        minpatchDataDict["bound_cost"] = minpatchObject.blm
-        minpatchDataDict["rem_small_patch"] = minpatchObject.removeBool
-        minpatchDataDict["add_patches"] = minpatchObject.addBool
-        minpatchDataDict["whittle_polish"] = minpatchObject.whittleBool
-        minpatchDataDict["patch_stats"] = True
-        minpatchDataDict["zone_stats"] = minpatchObject.zonestatsBool
+        minpatchDataDict = updateMinpatchDataDictWithParameters(minpatchObject, minpatchDataDict)
 
     return minpatchDataDict, setupOKBool
+
+
+def updateMinpatchDataDictWithParameters(minpatchObject, minpatchDataDict):
+    minpatchDataDict["bound_cost"] = minpatchObject.blm
+    minpatchDataDict["rem_small_patch"] = minpatchObject.removeBool
+    minpatchDataDict["add_patches"] = minpatchObject.addBool
+    minpatchDataDict["whittle_polish"] = minpatchObject.whittleBool
+    minpatchDataDict["patch_stats"] = True
+    minpatchDataDict["zone_stats"] = minpatchObject.zonestatsBool
+
+    return minpatchDataDict
+
 
 def makeFilesToBeCreatedList(setupObject, minpatchObject, zoneTypeDict):
     patchStatsFilePath = setupObject.outputPath + os.sep + 'mp_' + minpatchObject.marxanFileName + '_patchstats.csv'
@@ -121,7 +141,6 @@ def makeFilesToBeCreatedList(setupObject, minpatchObject, zoneTypeDict):
     return filesToBeCreatedList
 
 
-
 def outputFilesAlreadyExist(filesToBeCreatedList):
     outputFilesAlreadyExistBool = False
 
@@ -130,6 +149,7 @@ def outputFilesAlreadyExist(filesToBeCreatedList):
             outputFilesAlreadyExistBool = True
 
     return outputFilesAlreadyExistBool
+
 
 def outputFilesCannotBeSaved(filesToBeCreatedList):
     outputFilesCannotBeSavedBool = False
@@ -143,6 +163,7 @@ def outputFilesCannotBeSaved(filesToBeCreatedList):
 
     return outputFilesCannotBeSavedBool
 
+
 def makeMarxanFileList(setupObject, marxanNameString):
     marxanFileList = []
     rawList = os.listdir(setupObject.outputPath)
@@ -153,6 +174,7 @@ def makeMarxanFileList(setupObject, marxanNameString):
             marxanFileList.append(cString)
 
     return marxanFileList
+
 
 def makePUDicts(puLocString):
     unitDict = {}
@@ -173,6 +195,7 @@ def makePUDicts(puLocString):
 
     return unitDict, xyLocDictionary
 
+
 def makeTargetDict(targetLocString):
     targetDict = {}
 
@@ -191,12 +214,13 @@ def makeTargetDict(targetLocString):
 
     return targetDict
 
-def makeMPDicts(minpatchObject):
-    areaDictionary = {}
-    zoneDict = {}
-    zoneTypeDict = {}
 
-    with open(minpatchObject.detailsDatPath, 'rb') as f:
+def makeMPDicts(detailsDatPath):
+    areaDictionary = dict()
+    zoneDict = dict()
+    zoneTypeDict = dict()
+
+    with open(detailsDatPath, 'rb') as f:
         zoneReader = csv.reader(f)
         zoneReader.next()
         for aRow in zoneReader:
@@ -270,6 +294,7 @@ def makePatchPUIDDict(setupObject, minpatchDataDict):
 
     return patchPUIDDict
 
+
 def makePatchIDDetailsFromFileRow(aRow):
     rawFirstTwoValuesList = aRow.pop(0).split(":[")
     puID = int(rawFirstTwoValuesList[0])
@@ -285,12 +310,14 @@ def makePatchIDDetailsFromFileRow(aRow):
 
     return puID, patchIDList
 
+
 def isPatchPUIDListEmpty(firstPatchValue):
     patchPUIDListIsEmpty = False
     if firstPatchValue == ']':
         patchPUIDListIsEmpty = True
 
     return patchPUIDListIsEmpty
+
 
 def IsPatchBiggerThanMinimumSize(puID, patchIDList, areaDictionary, zoneDict):
     patchIsBiggerThanMinimum = False
@@ -304,6 +331,7 @@ def IsPatchBiggerThanMinimumSize(puID, patchIDList, areaDictionary, zoneDict):
         patchIsBiggerThanMinimum = True
 
     return patchIsBiggerThanMinimum
+
 
 def makeBoundMatrixDict(boundaryLocationString, unitDictionary):
     boundMatrixDict = {}
@@ -326,6 +354,7 @@ def makeBoundMatrixDict(boundaryLocationString, unitDictionary):
 
     return boundMatrixDict
 
+
 def makeAbundMatrixDict(abundanceLocationString, targetDictionary, unitDictionary):
     abundMatrixDict = {}
     puList = unitDictionary.keys()
@@ -347,18 +376,27 @@ def makeAbundMatrixDict(abundanceLocationString, targetDictionary, unitDictionar
 
     return abundMatrixDict
 
+
 def makeMarxanSolDict(marxanSolLocationString):
-    marxanSolDict = {}
+    marxanSolDictOKBool = True
+    marxanSolDict = dict()
+    validValueList = [0, 1]
 
     with open(marxanSolLocationString, 'rb') as f:
         solReader = csv.reader(f)
         solReader.next()
         for aRow in solReader:
-            puID = int(aRow[0])
-            solValue = int(aRow[1])
-            marxanSolDict[puID] = solValue
+            try:
+                puID = int(aRow[0])
+                solValue = int(aRow[1])
+                marxanSolDict[puID] = solValue
+                if solValue not in validValueList or puID < 0:
+                    marxanSolDictOKBool = False
+            except ValueError:
+                marxanSolDictOKBool = False
 
-    return marxanSolDict
+    return marxanSolDictOKBool, marxanSolDict
+
 
 def createPatchPUIDTextFile(setupObject, minpatchDataDict):
     xyLocDictionary = minpatchDataDict["xyLocDictionary"]
@@ -406,6 +444,7 @@ def isPUCentroidWithinPatchRadius(aXValue, aYValue, bXValue, bYValue, patchRadiu
 
     return centroidWithinPatchRadius
 
+
 def isPatchSizeIsAboveMinimumSize(areaDict, zonePatchAreaValue, puID, puIDPatchList):
     patchSizeIsAboveMinimumSize = False
 
@@ -417,3 +456,57 @@ def isPatchSizeIsAboveMinimumSize(areaDict, zonePatchAreaValue, puID, puIDPatchL
         patchSizeIsAboveMinimumSize = True
 
     return patchSizeIsAboveMinimumSize
+
+
+def radiusValuesVeryHigh(minpatchDataDict):
+    checkBool = False
+    minX, maxX, minY, maxY = returnMinMaxXYList(minpatchDataDict)
+    xExtent = maxX - minX
+    yExtent = maxY - minY
+    highestRadiusValue = returnHighestRadiusValue(minpatchDataDict)
+    if highestRadiusValue / xExtent > 0.25 or highestRadiusValue / yExtent > 0.25:
+        checkBool = True
+
+    return checkBool
+
+
+def returnMinMaxXYList(minpatchDataDict):
+    xyLocDictionary = minpatchDataDict["xyLocDictionary"]
+    minX, maxX, minY, maxY = ["blank", "blank", "blank", "blank"]
+    for puID in xyLocDictionary:
+        puStatus, xLocString, yLocString = xyLocDictionary[puID]
+        xLoc = float(xLocString)
+        yLoc = float(yLocString)
+        if minX == "blank" or xLoc < minX:
+            minX = xLoc
+        if maxX == "blank" or xLoc > maxX:
+            maxX = xLoc
+        if minY == "blank" or yLoc < minY:
+            minY = yLoc
+        if maxY == "blank" or yLoc > maxY:
+            maxY = yLoc
+
+    minMaxXYList = [minX, maxX, minY, maxY]
+
+    return minMaxXYList
+
+
+def returnHighestRadiusValue(minpatchDataDict):
+    zoneTypeDict = minpatchDataDict["zoneTypeDictionary"]
+    highestRadiusValue = -1
+    for zoneID in zoneTypeDict:
+        zoneRadiusValue = zoneTypeDict[zoneID][1]
+        if zoneRadiusValue > highestRadiusValue:
+            highestRadiusValue = zoneRadiusValue
+
+    return highestRadiusValue
+
+
+def makePUIDPatchIDCsvFromPatchDict(patchDict):
+    puIDPatchIDCsvWriter = csv.writer(open('C:\\Users\\Bob\\.qgis2\\python\\plugins\\cluz\\aa_puidpatchid.csv', "wb"))
+    puIDPatchIDCsvWriter.writerow(['PU_ID', 'Patch_ID'])
+
+    for patchID in patchDict:
+        for puID in patchDict[patchID][2]:
+            puIDPatchIDCsvWriter.writerow([str(puID), str(patchID)])
+

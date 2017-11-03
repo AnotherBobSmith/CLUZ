@@ -32,6 +32,11 @@ import shutil
 import stats
 
 import cluz_equations
+import cluz_mpfunctions
+import cluz_mpsetup
+import cluz_mpoutputs
+import cluz_setup
+import cluz_messages
 
 
 def createSpecDatFile(setupObject):
@@ -40,6 +45,7 @@ def createSpecDatFile(setupObject):
     specDatWriter = csv.writer(open(specDatName, "wb"))
     specDatWriter.writerow(["id", "name", "target", "spf", "type"])
 
+    featNameWarning = False
     targetDict = setupObject.targetDict
     featList = targetDict.keys()
     featList.sort()
@@ -50,6 +56,7 @@ def createSpecDatFile(setupObject):
         featSpf = featList[2]
         featType = featList[1]
         specDatWriter.writerow([aFeat, featName, featTarget, featSpf, featType])
+
 
 def createPuDatFile(setupObject):
     decPrec = setupObject.decimalPlaces
@@ -105,6 +112,7 @@ def createBoundDatFile(setupObject, extEdgeBool):
     progressCount = 1
     numPUs = len(puPolygonDict.keys())
 
+    emptyPolgyonPUIDSet = set()
     for puID in puIDGeomDict:
         progressMessage = "Bound.dat file: processed " + str(progressCount) + " of " + str(numPUs) + " planning units"
         qgis.utils.iface.mainWindow().statusBar().showMessage(progressMessage)
@@ -112,6 +120,8 @@ def createBoundDatFile(setupObject, extEdgeBool):
 
         puGeom = puIDGeomDict[puID]
         puVertexSet = makeNewPUVertexSet(puGeom)
+        if len(puVertexSet) == 0:
+            emptyPolgyonPUIDSet.add(puID)
 
         neighbPUIDSet = makeNeighbPUIDSet(puPolygonDict, spatialIndex, puGeom, puID, unitIDFieldIndex)
         neighbVertexDict = makeNeighbVertexDict(puIDGeomDict, neighbPUIDSet)
@@ -123,7 +133,11 @@ def createBoundDatFile(setupObject, extEdgeBool):
                 puDictKey = (puID, neighbPUID)
                 boundResultsDict[puDictKey] = returnRunningLengthValue(boundResultsDict, aVertex, puDictKey)
 
+    if len(emptyPolgyonPUIDSet) > 0:
+        emptyPolgyonPUIDSetErrorMessage(emptyPolgyonPUIDSet)
+
     writeBoundDatFile(setupObject, boundResultsDict, setupObject.decimalPlaces, extEdgeBool)
+
 
 def returnRunningLengthValue(boundResultsDict, aVertex, puDictKey):
     vertexLength = calcVertexLength(aVertex)
@@ -188,6 +202,18 @@ def calcVertexLength(aVertex):
     vertexLength = math.sqrt(xLength**2 + yLength**2)
 
     return vertexLength
+
+
+def emptyPolgyonPUIDSetErrorMessage(emptyPolgyonPUIDSet):
+    emptyPolgyonPUIDList = list(emptyPolgyonPUIDSet)
+    emptyPolgyonPUIDList.sort()
+    puIDString = ''
+    for puID in emptyPolgyonPUIDList:
+        puIDString += str(puID) + ', '
+    finalPUIDString = puIDString[0:-2]
+
+    qgis.utils.iface.messageBar().pushMessage("Shapefile error", "Planning units with the following ID values have problems with their topology and could not be processed by QGIS: " + finalPUIDString, QgsMessageBar.WARNING)
+
 
 def writeBoundDatFile(setupObject, boundResultsDict, decPrec, extEdgeBool):
     boundDatName = setupObject.inputPath + os.sep + "bound.dat"
@@ -362,7 +388,7 @@ def checkNumParallelAnalysesValue(numRunString, numParallelAnalyses):
 
 
 def marxanInputDict(setupObject, numIter, numRun, blmValue, missingProp, initialProp, outputName, extraOutputsBool):
-    marxanInputDict = {}
+    marxanInputDict = dict()
     marxanInputDict["numIter"] = numIter
     marxanInputDict["numRun"] = numRun
     marxanInputDict["blmValue"] = blmValue
@@ -390,6 +416,7 @@ def makeMarxanInputFile(setupObject, marxanInputDict):
     marxanSetupPath = marxanInputDict["marxanSetupPath"]
     if os.path.isfile(marxanPath):
         writeMarxanInputFile(setupObject, marxanInputDict, marxanSetupPath, extraOutputValue)
+
 
 def writeMarxanInputFile(setupObject, marxanInputDict, marxanSetupPath, extraOutputValue):
     marxanWriter = csv.writer(open(marxanSetupPath, "wb"))
@@ -452,6 +479,7 @@ def writeMarxanInputFile(setupObject, marxanInputDict, marxanSetupPath, extraOut
     marxanWriter.writerow(["VERBOSITY 3"])
     marxanWriter.writerow([])
 
+
 def makeParallelAnalysesDetailsList(numParallelAnalyses, outputName, numRuns):
     parallelAnalysesDetailsList = []
     runBlock = int(numRuns) // numParallelAnalyses
@@ -466,6 +494,7 @@ def makeParallelAnalysesDetailsList(numParallelAnalyses, outputName, numRuns):
         outputNameSuffixValue += 1
 
     return parallelAnalysesDetailsList
+
 
 def marxanUpdateSetupObject(setupObject, outputName, numIter, numRun, blmValue, extraOutputsBool, missingProp, initialProp):
     setupObject.outputName = outputName
@@ -483,6 +512,7 @@ def marxanUpdateSetupObject(setupObject, outputName, numIter, numRun, blmValue, 
 
     return setupObject
 
+
 def makeMarxanBatFile(setupObject):
     marxanFullName = setupObject.marxanPath
     marxanBatFileName = marxanFullName.replace(".exe", ".bat")
@@ -492,6 +522,7 @@ def makeMarxanBatFile(setupObject):
 
     return marxanBatFileName
 
+
 def waitingForMarxan(setupObject, outputName):
     marxanPathName = setupObject.outputPath + os.sep + outputName + "_best.txt"
     try:
@@ -499,6 +530,7 @@ def waitingForMarxan(setupObject, outputName):
             time.sleep(2)
     except KeyboardInterrupt:
         pass
+
 
 def waitingForParallelMarxan(setupObject, parallelAnalysesDetailsList):
     marxanPathNameList = []
@@ -514,6 +546,7 @@ def waitingForParallelMarxan(setupObject, parallelAnalysesDetailsList):
             time.sleep(2)
     except KeyboardInterrupt:
         pass
+
 
 def makeBestParralelFile(setupObject, mainOutputName, parallelAnalysesDetailsList):
     bestScoreValue = "blank"
@@ -537,6 +570,7 @@ def makeBestParralelFile(setupObject, mainOutputName, parallelAnalysesDetailsLis
     mvbestParralelFilePath = setupObject.outputPath + os.sep + bestScoreOutputName + "_mvbest.txt"
     mvbestFilePath = setupObject.outputPath + os.sep + mainOutputName + "_mvbest.txt"
     shutil.copyfile(mvbestParralelFilePath, mvbestFilePath)
+
 
 def makeSummedParralelFile(setupObject, mainOutputName, parallelAnalysesDetailsList):
     summedDict = {}
@@ -895,3 +929,443 @@ def makeCalibrateOutputFile(resultPathText, calibrateResultsDict):
         finalRowList = rowList1 + rowList2
 
         calibrateWriter.writerow(finalRowList)
+
+
+def makePortfolioPUDetailsDict():
+    portfolioPUDetailsDict = dict()
+    portfolioPUDetailsDict["statusDetailsBool"] = False
+    portfolioPUDetailsDict["spatialDetailsBool"] = False
+    portfolioPUDetailsDict["sfDetailsBool"] = False
+    portfolioPUDetailsDict["patchFeatDetailsBool"] = False
+    portfolioPUDetailsDict["peDetailsBool"] = False
+
+    return portfolioPUDetailsDict
+
+
+def addStatusDetailsToPortfolioDict(setupObject, portfolioPUDetailsDict):
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+    puFeatures = puLayer.getFeatures()
+    idFieldIndex = puLayer.fieldNameIndex('Unit_ID')
+    statusFieldIndex = puLayer.fieldNameIndex('Status')
+    puDict, areaDict = makePUDictFromCLUZPortfolio(setupObject)
+
+    rawStatusDict = {'Available': [0, 0, 0], 'Conserved': [0, 0, 0], 'Earmarked': [0, 0, 0], 'Excluded': [0, 0, 0]}
+    for puFeature in puFeatures:
+        puAttributes = puFeature.attributes()
+        puID = puAttributes[idFieldIndex]
+        puStatusText = str(puAttributes[statusFieldIndex])
+        rawStatusDict = updatePortfolioStatusDict(rawStatusDict, puDict, areaDict, puID, puStatusText)
+
+    portfolioPUDetailsDict["statusDetailsBool"] = True
+    portfolioPUDetailsDict["statusDataDict"] = makeStatusDataDict(rawStatusDict)
+
+    return portfolioPUDetailsDict
+
+
+def updatePortfolioStatusDict(portfolioStatusDict, puDict, areaDict, puID, puStatusText):
+    puArea = areaDict[puID]
+    puCost = puDict[puID][0]
+    puList = portfolioStatusDict[puStatusText]
+    [runningArea, runningCost, runningPUCount] = puList
+    puList = [runningArea + puArea, runningCost + puCost, runningPUCount + 1]
+    portfolioStatusDict[puStatusText] = puList
+
+    return portfolioStatusDict
+
+
+def makeStatusDataDict(rawStatusDict):
+    statusDataDict = dict()
+    [availableArea, availableCost, availablePUCount] = rawStatusDict['Available']
+    [conservedArea, conservedCost, conservedPUCount] = rawStatusDict['Conserved']
+    [earmarkedArea, earmarkedCost, earmarkedPUCount] = rawStatusDict['Earmarked']
+    [excludedArea, excludedCost, excludedPUCount] = rawStatusDict['Excluded']
+
+    regionArea = availableArea + conservedArea + earmarkedArea + excludedArea
+    regionCost = availableCost + conservedCost + earmarkedCost + excludedCost
+    regionPUCount = availablePUCount + conservedPUCount + earmarkedPUCount + excludedPUCount
+
+    portfolioArea = conservedArea + earmarkedArea
+    portfolioCost = conservedCost + earmarkedCost
+    portfolioPUCount = conservedPUCount + earmarkedPUCount
+
+    statusDataDict['Region'] = [regionArea, regionCost, regionPUCount]
+    statusDataDict['Portfolio'] = [portfolioArea, portfolioCost, portfolioPUCount]
+    statusDataDict['Available'] = rawStatusDict['Available']
+    statusDataDict['Conserved'] = rawStatusDict['Conserved']
+    statusDataDict['Earmarked'] = rawStatusDict['Earmarked']
+    statusDataDict['Excluded'] = rawStatusDict['Excluded']
+
+    return statusDataDict
+
+
+def addSpatialDetailsToPortfolioDict(setupObject, portfolioPUDetailsDict):
+    puDict, patchDict, dummyZoneDict = makePatchDictBasedOnDummyZoneFile(setupObject)
+    spatialDataDict = makeSpatialDataDict(setupObject, puDict, patchDict, dummyZoneDict)
+    portfolioPUDetailsDict["spatialDetailsBool"] = True
+    portfolioPUDetailsDict["spatialDataDict"] = spatialDataDict
+
+    return portfolioPUDetailsDict
+
+
+def makePatchDictBasedOnDummyZoneFile(setupObject):
+    puDict, areaDict = makePUDictFromCLUZPortfolio(setupObject)
+    minpatchDataDict = {'areaDictionary': areaDict}
+    boundMatrixDict = checkMakeBoundDatFile(setupObject, puDict)
+    minpatchDataDict["boundaryMatrixDictionary"] = boundMatrixDict
+    dummyZoneDict = makeDummyZoneDict(puDict)
+    minpatchDataDict["zoneDictionary"] = dummyZoneDict
+    patchDict = cluz_mpfunctions.makePatchDict(puDict, minpatchDataDict)
+
+    return puDict, patchDict, dummyZoneDict
+
+
+def makeSpatialDataDict(setupObject, puDict, patchDict, dummyZoneDict):
+    spatialDataDict = dict()
+    allAreaList, validAreaList = cluz_mpoutputs.makePatchAreaLists(patchDict, dummyZoneDict) #validAreaList is irrelevant
+    allAreaList.sort()
+    if len(allAreaList) > 0:
+        spatialDataDict['patchCount'] = len(allAreaList)
+        spatialDataDict['patchMedian'] = stats.lmedianscore(allAreaList)
+        spatialDataDict['patchSmallest'] = allAreaList[0]
+        spatialDataDict['patchLargest'] = allAreaList[-1]
+    else:
+        spatialDataDict['patchCount'] = 0
+        spatialDataDict['patchMedian'] = 0
+        spatialDataDict['patchSmallest'] = 0
+        spatialDataDict['patchLargest'] = 0
+
+    boundMatrixDict = checkMakeBoundDatFile(setupObject, puDict)
+    spatialDataDict['totalBoundLength'] = calcTotalBoundLength(boundMatrixDict, puDict)
+
+    return spatialDataDict
+
+
+def makePUDictFromCLUZPortfolio(setupObject):
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+    puFeatures = puLayer.getFeatures()
+    idFieldIndex = puLayer.fieldNameIndex('Unit_ID')
+    areaFieldIndex = puLayer.fieldNameIndex('Area')
+    costFieldIndex = puLayer.fieldNameIndex('Cost')
+    statusFieldIndex = puLayer.fieldNameIndex('Status')
+
+    puDict = {}
+    puStatusDict = {'Available': 0, 'Conserved': 2, 'Earmarked': 2, 'Excluded': 3}
+
+    areaDict = {}
+
+    for puFeature in puFeatures:
+        puAttributes = puFeature.attributes()
+        puID = puAttributes[idFieldIndex]
+        puArea = puAttributes[areaFieldIndex]
+        puCost = puAttributes[costFieldIndex]
+        puStatusText = str(puAttributes[statusFieldIndex])
+        puStatus = puStatusDict[puStatusText]
+
+        puDict[puID] = [puCost, puStatus]
+        areaDict[puID] = puArea
+
+    return puDict, areaDict
+
+
+def checkMakeBoundDatFile(setupObject, puDict):
+    boundDatFilePath = setupObject.inputPath + os.sep + 'bound.dat'
+    if os.path.exists(boundDatFilePath):
+        boundMatrixDict = cluz_mpsetup.makeBoundMatrixDict(boundDatFilePath, puDict)
+    else:
+        qgis.utils.iface.messageBar().pushMessage("Creating Bound.dat file", "CLUZ uses the Marxan bound.dat file to calculate the patch statistics. This did not exist and so has been created.", QgsMessageBar.INFO)
+        extEdgeBool = False
+        createBoundDatFile(setupObject, extEdgeBool)
+        boundMatrixDict = cluz_mpsetup.makeBoundMatrixDict(boundDatFilePath, puDict)
+
+    return boundMatrixDict
+
+
+def makeDummyZoneDict(puDict):
+    dummyZoneDict = {}
+    for puID in puDict:
+        dummyZoneDict[puID] = [1, 0, 0]
+
+    return dummyZoneDict
+
+
+def calcTotalBoundLength(boundaryMatrixDict, puDict):
+    totalBoundLength = 0
+
+    for id1Value in boundaryMatrixDict:
+        puBoundDict = boundaryMatrixDict[id1Value]
+        for id2Value in puBoundDict:
+            if id2Value >= id1Value:
+                boundValue = puBoundDict[id2Value]
+                conCount = 0
+                id1StatusValue = puDict[id1Value][1]
+                id2StatusValue = puDict[id2Value][1]
+
+                if id1StatusValue == 1 or id1StatusValue == 2:
+                    conCount += 1
+                if id2StatusValue == 1 or id2StatusValue == 2:
+                    conCount += 1
+                if conCount == 1:
+                    totalBoundLength += boundValue
+                #Allow for external edges
+                if conCount == 2 and id1Value == id2Value:
+                    totalBoundLength += boundValue
+
+    return totalBoundLength
+
+
+def returnStatusTabStringValues(setupObject, statusDataDict, statusType):
+    decPrec = setupObject.decimalPlaces
+    costValue = statusDataDict[statusType][0]
+    limboCostValue = round(float(costValue), decPrec)
+    costString = format(limboCostValue, "." + str(decPrec) + "f")
+
+    areaValue = statusDataDict[statusType][1]
+    limboAreaValue = round(float(areaValue), decPrec)
+    areaString = format(limboAreaValue, "." + str(decPrec) + "f")
+
+    countString = str(statusDataDict[statusType][2])
+
+    return costString, areaString, countString
+
+
+def makeSpatialTableItemDict(setupObject, spatialDataDict):
+    decPrec = setupObject.decimalPlaces
+    spatialTableItemDict = dict()
+    spatialTableItemDict[0] = ['Number of patches', str(spatialDataDict['patchCount'])]
+
+    smallPatchSize = spatialDataDict['patchSmallest']
+    limboSmallPatchSize = round(float(smallPatchSize), decPrec)
+    smallPatchSizeString = format(limboSmallPatchSize, "." + str(decPrec) + "f")
+    spatialTableItemDict[1] = ['Area of smallest patch', smallPatchSizeString]
+
+    medianPatchSize = spatialDataDict['patchMedian']
+    limboMedianPatchSize = round(float(medianPatchSize), decPrec)
+    medianPatchSizeString = format(limboMedianPatchSize, "." + str(decPrec) + "f")
+    spatialTableItemDict[2] = ['Median area of patches', medianPatchSizeString]
+
+    largePatchSize = spatialDataDict['patchLargest']
+    limboLargePatchSize = round(float(largePatchSize), decPrec)
+    largePatchSizeString = format(limboLargePatchSize, "." + str(decPrec) + "f")
+    spatialTableItemDict[3] = ['Area of largest patch', largePatchSizeString]
+
+    boundaryLength = spatialDataDict['totalBoundLength']
+    limboBoundaryLength = round(float(boundaryLength), decPrec)
+    boundaryString = format(limboBoundaryLength, "." + str(decPrec) + "f")
+    spatialTableItemDict[4] = ['Portfolio boundary length', boundaryString]
+
+    return spatialTableItemDict
+
+
+def addSFDetailsToPortfolioDict(portfolioPUDetailsDict, sfValueList, sfRunsValue):
+    sfDataDict = dict()
+    sfValueList.sort()
+
+    zeroSFCount, greaterThanZeroCount = countSFValuesZeroesGreaterThanZero(sfValueList)
+
+    sfDataDict[0] = ['Equals 0', str(zeroSFCount)]
+    sfDataDict[1] = ['Greater than 0', str(greaterThanZeroCount)]
+    sfDataDict[2] = ['---', '---']
+
+    sfDataDictKey = 3
+    sfQuartileTupleList = makeSFQuartileTupleList(sfRunsValue)
+    for (rangeName, minRangeValue, maxRangeValue) in sfQuartileTupleList:
+        sfRangeValueList = makeSFRangeValueList(sfValueList, minRangeValue, maxRangeValue)
+        finalRangeName = rangeName + ': ' + str(minRangeValue) + " - " + str(maxRangeValue)
+        sfDataDict[sfDataDictKey] = [finalRangeName, str(len(sfRangeValueList))]
+        sfDataDictKey += 1
+    sfDataDict[7] = ['---', '---']
+
+    top5pcValue = int(sfRunsValue * 0.95)
+    top5pcValueName = "Top 5% of SF values" + ': ' + str(top5pcValue) + " - " + str(sfRunsValue)
+    sfDataDict[8] = [top5pcValueName, str(len(makeSFRangeValueList(sfValueList, top5pcValue, sfRunsValue)))]
+    sfDataDict[9] = ['Max SF: ' + str(sfRunsValue), str(sfValueList.count(sfRunsValue))]
+
+    portfolioPUDetailsDict["sfDetailsBool"] = True
+    portfolioPUDetailsDict["sfDataDict"] = sfDataDict
+
+    return portfolioPUDetailsDict
+
+
+def makeFullSFValueList(setupObject, sfFieldName):
+    sfValueList = list()
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+    puFeatures = puLayer.getFeatures()
+    sfFieldIndex = puLayer.fieldNameIndex(sfFieldName)
+    statusFieldIndex = puLayer.fieldNameIndex('Status')
+
+    for puFeature in puFeatures:
+        puAttributes = puFeature.attributes()
+        puSFValue = puAttributes[sfFieldIndex]
+        if puSFValue >= 0:
+            puStatusText = puAttributes[statusFieldIndex]
+            if puStatusText == 'Available' or puStatusText == 'Earmarked':
+                sfValueList.append(puSFValue)
+
+    return sfValueList
+
+def countSFValuesZeroesGreaterThanZero(fullSFValueList):
+    zeroSFCount, greaterThanZeroCount = 0, 0
+    for aValue in fullSFValueList:
+        if aValue == 0:
+            zeroSFCount += 1
+        elif aValue > 0:
+            greaterThanZeroCount += 1
+
+    return zeroSFCount, greaterThanZeroCount
+
+def makeSFRangeValueList(fullSFValueList, minRange, maxRange):
+    sfValueList = list()
+    for aValue in fullSFValueList:
+        if aValue >= minRange and aValue <= maxRange:
+            sfValueList.append(aValue)
+
+    return sfValueList
+
+
+def makeSFQuartileTupleList(sfRunsValue):
+    sfQuartileTupleList = list()
+    sfQuartileTupleList.append(("1st Quartile", 1, int(sfRunsValue * 0.25)))
+    sfQuartileTupleList.append(("2nd Quartile", int(sfRunsValue * 0.25) + 1, int(sfRunsValue * 0.5)))
+    sfQuartileTupleList.append(("3rd Quartile", int(sfRunsValue * 0.5) + 1, int(sfRunsValue * 0.75)))
+    sfQuartileTupleList.append(("4th Quartile", int(sfRunsValue * 0.75) + 1, sfRunsValue))
+
+    return sfQuartileTupleList
+
+
+def makeSFFieldList(setupObject):
+    sfFieldList = []
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+
+    for aField in puLayer.pendingFields():
+        if str(aField.typeName()) == 'Integer' and str(aField.name()) != 'Unit_ID':
+            sfFieldList.append(aField.name())
+
+    if len(sfFieldList) == 0:
+        sfFieldList.append("No suitable fields")
+
+    return sfFieldList
+
+
+def addPatchFeatDetailsToPortfolioDict(setupObject, portfolioPUDetailsDict):
+    puDict, patchDict, dummyZoneDict = makePatchDictBasedOnDummyZoneFile(setupObject) #Only need patchDict
+    patchFeatDataDict = makePatchFeatDataDict(setupObject, patchDict)
+
+    portfolioPUDetailsDict["patchFeatDetailsBool"] = True
+    portfolioPUDetailsDict["patchFeatDataDict"] = patchFeatDataDict
+
+    return portfolioPUDetailsDict
+
+
+def makePatchFeatDataDict(setupObject, patchDict):
+    if setupObject.setupStatus == "files_checked":
+        if setupObject.abundPUKeyDict == "blank":
+            setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
+
+    patchFeatDataDict = dict()
+    for patchID in patchDict:
+        patchFeatPresenceSet = set()
+        patchPUIDList = patchDict[patchID][2]
+        for puID in patchPUIDList:
+            try:
+                puIDFeatSet = set(setupObject.abundPUKeyDict[puID].keys())
+                patchFeatPresenceSet = patchFeatPresenceSet.union(puIDFeatSet)
+            except KeyError:
+                pass
+        for featID in patchFeatPresenceSet:
+            try:
+                featCount = patchFeatDataDict[featID]
+            except KeyError:
+                featCount = 0
+            featCount += 1
+            patchFeatDataDict[featID] = featCount
+
+    return patchFeatDataDict
+
+def returnSelectedPUIDDict(setupObject):
+    selectedPUIDDict = dict()
+
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+    qgis.utils.iface.setActiveLayer(puLayer)
+    puLayer = qgis.utils.iface.activeLayer()
+    provider = puLayer.dataProvider()
+    idFieldOrder = provider.fieldNameIndex("Unit_ID")
+    statusFieldOrder = provider.fieldNameIndex("Status")
+
+    selectedPUs = puLayer.selectedFeatures()
+    for aPU in selectedPUs:
+        puID = aPU.attributes()[idFieldOrder]
+        puStatus = str(aPU.attributes()[statusFieldOrder])
+        selectedPUIDDict[puID] = puStatus
+
+    return selectedPUIDDict
+
+def returnSelectedPUDetailsDict(setupObject, selectedPUIDDict):
+    selectedPUDetailsDict = dict()
+    for puID in selectedPUIDDict:
+        puStatus = selectedPUIDDict[puID]
+        puAbundDict = setupObject.abundPUKeyDict[puID]
+        try:
+            statusDetailsDict = selectedPUDetailsDict[puStatus]
+        except KeyError:
+            statusDetailsDict = dict()
+
+        for featID in puAbundDict:
+            try:
+                featAmount = puAbundDict[featID]
+            except KeyError:
+                featAmount = 0
+            try:
+                featRunningAmount = statusDetailsDict[featID] + featAmount
+            except KeyError:
+                featRunningAmount = 0
+            featRunningAmount += featAmount
+            statusDetailsDict[featID] = featRunningAmount
+
+        selectedPUDetailsDict[puStatus] = statusDetailsDict
+
+    return selectedPUDetailsDict
+
+def returnStringAmountPerStatus(setupObject, selectedPUDetailsDict, statusValue, featID):
+    decPrec = setupObject.decimalPlaces
+    try:
+        featAmount = selectedPUDetailsDict[statusValue][featID]
+        featAmountRound = round(float(featAmount), decPrec)
+        featAmountString = format(featAmountRound, "." + str(decPrec) + "f")
+
+    except KeyError:
+        featAmountString = '0'
+
+    return featAmountString
+
+
+def returnStringShortfall(setupObject, featID):
+    decPrec = setupObject.decimalPlaces
+    targetAmount = setupObject.targetDict[featID][3]
+    conAmount = setupObject.targetDict[featID][4]
+    if conAmount >= targetAmount:
+        stringShortfall = 'Target met'
+    else:
+        shortValue = targetAmount - conAmount
+        shortValueRound = round(float(shortValue), decPrec)
+        stringShortfall = format(shortValueRound, "." + str(decPrec) + "f")
+
+
+    return stringShortfall
+
+
+def makePatchPortfolioDict(portfolioPathNameText):
+    try:
+        portfolioOKBool, portfolioDict = cluz_mpsetup.makeMarxanSolDict(portfolioPathNameText)
+    except IOError:
+        qgis.utils.iface.messageBar().pushMessage("File error", "The specified file path is not valid. Please select another one.", QgsMessageBar.WARNING)
+        portfolioOKBool = False
+        portfolioDict = dict()
+
+    return portfolioOKBool, portfolioDict
+
+def portfolioNotOKErrorMessage():
+    qgis.utils.iface.messageBar().pushMessage("File error", "The specified file is not valid. It should consist of two fields: the first lists the planning unit ID values and the second shows a 0 or 1.", QgsMessageBar.WARNING)
+
+
+def makePatchPortfolioShapefile(setupObject, portfolioDict):
+    pass

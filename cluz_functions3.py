@@ -25,6 +25,7 @@ import qgis
 from qgis.core import *
 from qgis.gui import *
 import cluz_setup
+import cluz_messages
 
 def returnTargetsMetTuple(setupObject):
     numTargets = 0
@@ -151,7 +152,6 @@ def undoStatusChangeInPuLayer(setupObject):
 
 ####################################################################http://www.opengis.ch/2015/04/29/performance-for-mass-updating-features-on-layers/
 def changeBestToEarmarkedPUs(setupObject):
-    canvas = qgis.utils.iface.mapCanvas()
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     puProvider = puLayer.dataProvider()
     idFieldOrder = puProvider.fieldNameIndex("Unit_ID")
@@ -160,34 +160,76 @@ def changeBestToEarmarkedPUs(setupObject):
     changeBool = True
 
     if bestFieldOrder == -1:
-        QMessageBox.warning(None, "Incorrect format", "The planning unit layer has no field named Best (which is produced by running Marxan). This process will terminate.")
+        cluz_messages.changeBestToEarmarkedPU_NoBestField()
         changeBool = False
 
-    if changeBool == True:
-        selectedPUIDStatusDict = {}
-        puLayer.startEditing()
-        puFeatures = puLayer.getFeatures()
-        for puFeature in puFeatures:
-            puRow = puFeature.id()
-            puID = puFeature.attributes()[idFieldOrder]
-            puStatus = puFeature.attributes()[statusFieldOrder]
-            bestStatus = puFeature.attributes()[bestFieldOrder]
-            if bestStatus == "Selected":
-                puLayer.changeAttributeValue(puRow, statusFieldOrder, "Earmarked")
-                selectedPUIDStatusDict[puID] = puStatus
-        puLayer.commitChanges()
-        puLayer.triggerRepaint()
-        canvas.refresh()
-
+    if changeBool:
+        selectedPUIDStatusDict = changeStatus_makeSelectedPUIDStatusDict(puLayer, idFieldOrder, statusFieldOrder, bestFieldOrder)
+        cluz_setup.updatePULayerToShowChangesByShiftingExtent()
         statusType = "Earmarked" # This works out the changes needed to update the Best PUs to Earmarked
         changeAbundDict = calcChangeAbundDict(setupObject, selectedPUIDStatusDict, statusType)
         updateTargetDictWithChanges(setupObject, changeAbundDict)
         cluz_setup.updateTargetCSVFromTargetDict(setupObject, setupObject.targetDict)
-        qgis.utils.iface.messageBar().pushMessage("Process completed", "Planning units that were selected in the Best portfolio now have Earmarked status.", QgsMessageBar.INFO)
+        cluz_messages.changeBestToEarmarkedPU_Completed()
+        cluz_setup.removeThenAddPULayer(setupObject)
 
 
-def makeIdentDict(targetDict, targetMetDict, puAbundDict):
-    identDict = {}
+def changeStatus_makeSelectedPUIDStatusDict(puLayer, idFieldOrder, statusFieldOrder, bestFieldOrder):
+    selectedPUIDStatusDict = dict()
+    puLayer.startEditing()
+    puFeatures = puLayer.getFeatures()
+    for puFeature in puFeatures:
+        puRow = puFeature.id()
+        puID = puFeature.attributes()[idFieldOrder]
+        puStatus = puFeature.attributes()[statusFieldOrder]
+        bestStatus = puFeature.attributes()[bestFieldOrder]
+        if bestStatus == "Selected":
+            puLayer.changeAttributeValue(puRow, statusFieldOrder, "Earmarked")
+            selectedPUIDStatusDict[puID] = puStatus
+    puLayer.commitChanges()
+
+    return selectedPUIDStatusDict
+
+
+def returnPointPUIDList(setupObject, point):
+    pointPUIDList = list()
+    pntGeom = QgsGeometry.fromPoint(point)
+
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+    puProvider = puLayer.dataProvider()
+    puIdFieldOrder = puProvider.fieldNameIndex("Unit_ID")
+
+    selectList = list()
+    for feature in puLayer.getFeatures():
+        if feature.geometry().intersects(pntGeom):
+            selectList.append(feature.id())
+    if len(selectList) > 0:
+        featID = selectList[0]
+        puRequest = QgsFeatureRequest().setFilterFids([featID])
+        for puFeature in puLayer.getFeatures(puRequest):
+            puAttributes = puFeature.attributes()
+            puID = puAttributes[puIdFieldOrder]
+            pointPUIDList.append(puID)
+
+    return pointPUIDList
+
+
+def makeIdentifyData(setupObject, selectedPUIDList):
+    identDict = dict()
+    targetMetDict = dict()
+    for puID in selectedPUIDList:
+        try:
+            puAbundDict = setupObject.abundPUKeyDict[puID]
+            identDict, targetMetDict = makeIdentDict(setupObject.targetDict, puAbundDict)
+        except KeyError:
+            pass
+
+    return identDict, targetMetDict
+
+
+def makeIdentDict(targetDict, puAbundDict):
+    identDict = dict()
+    targetMetDict = dict()
     for featID in puAbundDict:
         featAmount = puAbundDict[featID]
         featName = targetDict[featID][0]
@@ -217,7 +259,18 @@ def makeIdentDict(targetDict, targetMetDict, puAbundDict):
 
         identDict[featID] = [str(featID), featName, str(featAmount), pcOfTotalString, str(featTarget), pcOfTargetString, pcTargetMetString]
 
-    return identDict
+    return identDict, targetMetDict
+
+def setIdentifyDialogWindowTitle(selectedPUIDList, identDict):
+    titleString = "No planning unit selected"
+    if len(selectedPUIDList) > 0:
+        puID = selectedPUIDList[0]
+        if len(identDict) > 0:
+            titleString = "Planning unit " + str(puID) + ": list of features"
+        else:
+            titleString = "Planning unit " + str(puID) + ": does not contain any features"
+
+    return titleString
 
 
 def addIdenitfyDataToTableWidget(identifyTableWidget, targetMetDict, identDict):
@@ -239,3 +292,4 @@ def addIdenitfyDataToTableWidget(identifyTableWidget, targetMetDict, identDict):
                 else:
                     featIDItem.setTextColor(QColor.fromRgb(128, 128, 128))
             identifyTableWidget.setItem(aRow, aCol, featIDItem)
+

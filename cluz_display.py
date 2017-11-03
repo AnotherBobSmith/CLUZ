@@ -28,18 +28,34 @@ import qgis
 import os
 
 
-def addPlanningUnit(setupObject, legendPosition):
-    canvas = qgis.utils.iface.mapCanvas()
+def addPULayer(setupObject, legendPosition):
+    root = QgsProject.instance().layerTreeRoot()
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
-
     categoryList = makePULayerLegendCategory()
     myRenderer = QgsCategorizedSymbolRendererV2('', categoryList)
     myRenderer.setClassAttribute("Status")
     puLayer.setRendererV2(myRenderer)
-    QgsMapLayerRegistry.instance().addMapLayer(puLayer)
 
+    QgsMapLayerRegistry.instance().addMapLayer(puLayer, False)
+    root.insertLayer(legendPosition, puLayer)
+
+    canvas = qgis.utils.iface.mapCanvas()
     canvas.refresh()
     qgis.utils.iface.setActiveLayer(puLayer)
+
+# def addPlanningUnit(setupObject, legendPosition):
+#     canvas = qgis.utils.iface.mapCanvas()
+#     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+#
+#     categoryList = makePULayerLegendCategory()
+#     myRenderer = QgsCategorizedSymbolRendererV2('', categoryList)
+#     myRenderer.setClassAttribute("Status")
+#     puLayer.setRendererV2(myRenderer)
+#     QgsMapLayerRegistry.instance().addMapLayer(puLayer)
+#
+#     canvas.refresh()
+#     qgis.utils.iface.setActiveLayer(puLayer)
+#
 
 def makePULayerLegendCategory():
     categoryList = []
@@ -142,33 +158,20 @@ def addPUIDValuesToBaseDistributionMapShapefile(distrLayer, selectedFeatIDList):
 def displayDistributionMaps(setupObject, distShapeFilePathName, abundValuesDict, legendType, selectedFeatIDList):
     iface = qgis.utils.iface
     canvas = iface.mapCanvas()
-
-    colourDict = {}
-    colourDict[1] = ['#FEE1E1','#FE8787','#FF0000','#AE0000','#630000']
-    colourDict[2] = ['#FEEEE1','#FEBC87','#FE8828','#D15D00','#863C00']
-    colourDict[3] = ['#FEFAE1','#FEEC87','#FEDD28','#D1B100','#867100']
-    colourDict[4] = ['#F6FEE1','#DCFE87','#C1FE28','#95D100','#608600']
-    colourDict[5] = ['#E1FEFE','#87FEFE','#28FEFE','#00D6D6','#009A9A']
-    colourDict[6] = ['#E6FEE6','#88FE87','#00FF00','#02A900','#015400']
-    colourDict[7] = ['#E1FEF5','#87FEDA','#28FEBD','#00D192','#00865D']
-    colourDict[8] = ['#E1E1FE','#8789FE','#282CFE','#0004D1','#000286']
-    colourDict[9] = ['#FAD7FE','#F587FE','#DD00EF','#A500B3','#5C0063']
-    colourDict[10] = ['#FEE1F6','#FE87DE','#FE28C4','#D10098','#860062']
-    colourDict[11] = ['#F5F5F5','#B9B9B9','#7D7D7D','#414141','#000000']
-    colourDict[12] = ['#FFEABE','#E0B986','#BC865D','#8B5445','#5A2D2D']
+    colourDict = makeColourDict()
     colourKey = 1
 
-    for dFeat in selectedFeatIDList:
+    for featID in selectedFeatIDList:
         rangeList = []
         colourList = colourDict[colourKey]
         colourKey += 1
         if colourKey > len(colourDict.keys()):
             colourKey = 1
 
-        aDistLayerName = setupObject.targetDict[int(dFeat)][0]
+        aDistLayerName = setupObject.targetDict[int(featID)][0]
         aDistLayer = QgsVectorLayer(distShapeFilePathName, aDistLayerName, "ogr")
-        aDistLayerFieldName = "F_" + str(dFeat)
-        aFeatAbundValueTupleList = abundValuesDict[dFeat]
+        aDistLayerFieldName = "F_" + str(featID)
+        aFeatAbundValueTupleList = abundValuesDict[featID]
         if legendType == "equal_interval":
             legendValCatList = calcEqualIntervalLegendClasses(aFeatAbundValueTupleList)
         if legendType == "equal_area":
@@ -185,9 +188,28 @@ def displayDistributionMaps(setupObject, distShapeFilePathName, abundValuesDict,
         myRenderer.setMode(QgsGraduatedSymbolRendererV2.EqualInterval)
         myRenderer.setClassAttribute(aDistLayerFieldName)
         aDistLayer.setRendererV2(myRenderer)
+        aDistLayer.setLayerTransparency(50)
         QgsMapLayerRegistry.instance().addMapLayer(aDistLayer)
 
     canvas.refresh()
+
+
+def makeColourDict():
+    colourDict = dict()
+    colourDict[1] = ['#FEE1E1','#FE8787','#FF0000','#AE0000','#630000']
+    colourDict[2] = ['#FEEEE1','#FEBC87','#FE8828','#D15D00','#863C00']
+    colourDict[3] = ['#FEFAE1','#FEEC87','#FEDD28','#D1B100','#867100']
+    colourDict[4] = ['#F6FEE1','#DCFE87','#C1FE28','#95D100','#608600']
+    colourDict[5] = ['#E1FEFE','#87FEFE','#28FEFE','#00D6D6','#009A9A']
+    colourDict[6] = ['#E6FEE6','#88FE87','#00FF00','#02A900','#015400']
+    colourDict[7] = ['#E1FEF5','#87FEDA','#28FEBD','#00D192','#00865D']
+    colourDict[8] = ['#E1E1FE','#8789FE','#282CFE','#0004D1','#000286']
+    colourDict[9] = ['#FAD7FE','#F587FE','#DD00EF','#A500B3','#5C0063']
+    colourDict[10] = ['#FEE1F6','#FE87DE','#FE28C4','#D10098','#860062']
+    colourDict[11] = ['#F5F5F5','#B9B9B9','#7D7D7D','#414141','#000000']
+    colourDict[12] = ['#FFEABE','#E0B986','#BC865D','#8B5445','#5A2D2D']
+
+    return colourDict
 
 def calcEqualIntervalLegendClasses(aFeatAbundValueTupleList):
     abundList = []

@@ -42,14 +42,16 @@ def xxxSaveTextToFile(outputName, anItem):
     textFile.writelines(finalString)
     textFile.close()
 
-def practice(setupObject):
-    layers = QgsMapLayerRegistry.instance().mapLayers()
+def xxxSavePortfolioToFile(outputName, portfolioDict):
+    baseName = 'C:\Users\Bob\.qgis2\python\plugins\Cluz\hope.txt'
+    pathName = baseName.replace('hope', outputName)
+    headerList = ["ID", "Status"]
+    portfolioWriter = csv.writer(open(pathName, "wb"))
+    portfolioWriter.writerow(headerList)
 
-    for name, layer in layers.iteritems():
-        if str(name)[0:5] == "Plann":
-            QgsMapLayerRegistry.instance().removeMapLayer(layer.id())
+    for puID in portfolioDict:
+        portfolioWriter.writerow([puID, portfolioDict[puID][1]])
 
-    checkAddPlanningUnit(setupObject)
 
 def removePrefixMakeIDValue(aString):
     numList = re.findall(r'[0-9]+', aString)
@@ -93,13 +95,18 @@ class CluzSetupObject:
 
         self.abundPUKeyDict = "blank"
 
+        #################################################
+        self.overRide = False  ###########################
+        #################################################
+
+
 class MinPatchObject:
     def __init__(self):
 
         self.setupStatus = "blank" #Can be "values_set", "values_checked" or "files_checked"
 
 def makeSetupDictFromSetupFile(setupFilePath):
-    setupDict = {}
+    setupDict = dict()
     with open(setupFilePath, 'rb') as f:
         setupReader = csv.reader(f)
         for aRow in setupReader:
@@ -367,8 +374,7 @@ def createAndCheckPuLayerFile(setupObject, checkBool):
     fieldDetailsList = []
     for aField in fields:
         fieldDetailsList.append((str(aField.name()), str(aField.typeName())))
-
-    if fieldDetailsList.count(('Unit_ID', 'Integer')) == 0:
+    if fieldDetailsList.count(('Unit_ID', 'Integer')) == 0 and fieldDetailsList.count(('Unit_ID', 'Integer64')) == 0:
         qgis.utils.iface.messageBar().pushMessage("Formatting error: ", "The planning unit shapefile must contain a field named Unit_ID containing integer values.", QgsMessageBar.WARNING)
         checkBool = False
     if fieldDetailsList.count(('Area', 'Real')) == 0:
@@ -525,10 +531,37 @@ def checkPULayerPresent():
 
     return puLayerPresentBool
 
-def checkAddPlanningUnit(setupObject):
+
+def checkAddPULayer(setupObject):
     if setupObject.setupStatus == "files_checked":
-        if checkPULayerPresent() == False:
-            cluz_display.addPlanningUnit(setupObject, 0) # 0 = Position
+        if not checkPULayerPresent():
+            cluz_display.addPULayer(setupObject, 0) # 0 = Position
+
+
+def removeThenAddPULayer(setupObject): # This is a way of refreshing PU Layer so it shows newly added fields
+    canvas = qgis.utils.iface.mapCanvas()
+    allLayers = canvas.layers()
+    puLayerPositionInTOC = 0
+    for aLayer in allLayers:
+        if aLayer.name() == "Planning units":
+            puLayer = aLayer
+            QgsMapLayerRegistry.instance().removeMapLayers([puLayer.id()])
+            canvas.refresh()
+            cluz_display.addPULayer(setupObject, puLayerPositionInTOC)
+        puLayerPositionInTOC += 1
+
+
+def updatePULayerToShowChangesByShiftingExtent():# This is a way of refreshing PU Layer so it displays changes in values
+    canvas = qgis.utils.iface.mapCanvas()
+
+    canvasExtent = canvas.extent()
+    extMinX, extMaxX = canvasExtent.xMinimum(), canvasExtent.xMaximum()
+    extMinY, extMaxY = canvasExtent.yMinimum(), canvasExtent.yMaximum()
+    xShift = (extMaxX - extMinX) * 0.005
+    shiftMinX, shiftMaxX = extMinX + xShift, extMaxX + xShift
+    canvas.setExtent(QgsRectangle(shiftMinX, extMinY, shiftMaxX, extMaxY))
+    canvas.refresh()
+
 
 def returnTempPathName(pathString, fileType):
     suffixString = "." + fileType
@@ -593,3 +626,11 @@ def returnLowestUnusedFileNameNumber(dirPath, fileNameBase, extTypeText):
         fileNameNumber += 1
 
     return fileNameNumber
+
+
+def returnRoundedValue(setupObject, rawValue):
+    decPrec = setupObject.decimalPlaces
+    limboValue = round(float(rawValue), decPrec)
+    finalValue = format(limboValue, "." + str(decPrec) + "f")
+
+    return finalValue

@@ -26,12 +26,16 @@ from qgis.gui import *
 import qgis
 
 from cluz_form_distribution import Ui_distributionDialog
+from cluz_form_identify_selected import Ui_identifySelectedDialog
 from cluz_form_richness import Ui_richnessDialog
+from cluz_form_portfolio import Ui_portfolioDialog
+from cluz_form_portfolio_results import Ui_portfolioResultsDialog
 from cluz_form_inputs import Ui_inputsDialog
 from cluz_form_marxan import Ui_marxanDialog
 from cluz_form_load import Ui_loadDialog
 from cluz_form_calibrate import Ui_calibrateDialog
 from cluz_form_minpatch import Ui_minpatchDialog
+from cluz_form_patches import Ui_patchesDialog
 
 import os
 import csv
@@ -79,7 +83,7 @@ class distributionDialog(QDialog, Ui_distributionDialog):
     def runDisplayDistributionMaps(self, setupObject):
         if self.intervalRadioButton.isChecked():
             legendType = "equal_interval"
-        if self.areaRadioButton.isChecked():
+        elif self.areaRadioButton.isChecked():
             legendType = "equal_area"
         distShapeFilePathName = self.filePathlineEdit.text()
         selectedFeatList = [item.text() for item in self.featListWidget.selectedItems()]
@@ -89,6 +93,80 @@ class distributionDialog(QDialog, Ui_distributionDialog):
         cluz_display.displayDistributionMaps(setupObject, distShapeFilePathName, abundValuesDict, legendType, selectedFeatIDList)
 
         self.close()
+
+class identifySelectedDialog(QDialog, Ui_identifySelectedDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+        self.clip = QApplication.clipboard()
+
+        returnSelectedPUIDDict = cluz_functions2.returnSelectedPUIDDict(setupObject)
+        selectedPUDetailsDict = cluz_functions2.returnSelectedPUDetailsDict(setupObject, returnSelectedPUIDDict)
+
+        if len(returnSelectedPUIDDict) > 0:
+            self.showSelectedIdentifyData(setupObject, selectedPUDetailsDict)
+            self.setWindowTitle('Details of ' + str(len(returnSelectedPUIDDict)) + ' planning units.')
+        else:
+            self.setWindowTitle('No planning units selected')
+
+
+    def showSelectedIdentifyData(self, setupObject, selectedPUDetailsDict):
+        self.identifySelectedTableWidget.clear()
+        self.identifySelectedTableWidget.setColumnCount(8)
+        self.addSelectedIdenitfyDataToTableWidget(setupObject, selectedPUDetailsDict)
+
+        headerList = ["ID  ", "Name  ", "Available  ", "Conserved  ", "Earmarked  ", "Excluded  ", "Target  ", "Target shortfall  "]
+        self.identifySelectedTableWidget.setHorizontalHeaderLabels(headerList)
+        for aColValue in range(len(headerList)):
+            self.identifySelectedTableWidget.resizeColumnToContents(aColValue)
+
+
+    def addSelectedIdenitfyDataToTableWidget(self, setupObject, selectedPUDetailsDict):
+        featIDList = setupObject.targetDict.keys()
+        featIDList.sort()
+        for rowNumber in range(0, len(featIDList)):
+            featID = featIDList[rowNumber]
+            self.identifySelectedTableWidget.insertRow(rowNumber)
+            featIDTableItem = QTableWidgetItem(str(featID))
+            featNameTableItem = QTableWidgetItem(str(setupObject.targetDict[featID][0]))
+            avaIDTableItem = QTableWidgetItem(str(cluz_functions2.returnStringAmountPerStatus(setupObject, selectedPUDetailsDict, 'Available', featID)))
+            conIDTableItem = QTableWidgetItem(str(cluz_functions2.returnStringAmountPerStatus(setupObject, selectedPUDetailsDict, 'Conserved', featID)))
+            earIDTableItem = QTableWidgetItem(str(cluz_functions2.returnStringAmountPerStatus(setupObject, selectedPUDetailsDict, 'Earmarked', featID)))
+            exlIDTableItem = QTableWidgetItem(str(cluz_functions2.returnStringAmountPerStatus(setupObject, selectedPUDetailsDict, 'Excluded', featID)))
+            featTarget = cluz_setup.returnRoundedValue(setupObject, setupObject.targetDict[featID][3])
+            featTargetTableItem = QTableWidgetItem(featTarget)
+            featShortfallTableItem = QTableWidgetItem(cluz_functions2.returnStringShortfall(setupObject, featID))
+
+            self.identifySelectedTableWidget.setItem(rowNumber, 0, featIDTableItem)
+            self.identifySelectedTableWidget.setItem(rowNumber, 1, featNameTableItem)
+            self.identifySelectedTableWidget.setItem(rowNumber, 2, avaIDTableItem)
+            conIDTableItem.setTextColor(QColor.fromRgb(0, 153, 51))
+            self.identifySelectedTableWidget.setItem(rowNumber, 3, conIDTableItem)
+            earIDTableItem.setTextColor(QColor.fromRgb(51, 204, 51))
+            self.identifySelectedTableWidget.setItem(rowNumber, 4, earIDTableItem)
+            self.identifySelectedTableWidget.setItem(rowNumber, 5, exlIDTableItem)
+            self.identifySelectedTableWidget.setItem(rowNumber, 6, featTargetTableItem)
+            if cluz_functions2.returnStringShortfall(setupObject, featID) == 'Target met':
+                featShortfallTableItem.setTextColor(QColor.fromRgb(128, 128, 128))
+            self.identifySelectedTableWidget.setItem(rowNumber, 7, featShortfallTableItem)
+
+    # http://stackoverflow.com/questions/24971305/copy-pyqt-table-selection-including-column-and-row-headers
+    def keyPressEvent(self, e):
+        if (e.modifiers() & Qt.ControlModifier):
+            selected = self.identifySelectedTableWidget.selectedRanges()
+
+            if e.key() == Qt.Key_C: #copy
+                s = ""
+                for r in xrange(selected[0].topRow(), selected[0].bottomRow() + 1):
+                    for c in xrange(selected[0].leftColumn(), selected[0].rightColumn()+1):
+                        try:
+                            s += str(self.identifySelectedTableWidget.item(r, c).text()) + "\t"
+                        except AttributeError:
+                            s += "\t"
+                    s = s[:-1] + "\n" #eliminate last '\t'
+                self.clip.setText(s)
+
 
 class richnessDialog(QDialog, Ui_richnessDialog):
     def __init__(self, iface, setupObject):
@@ -184,6 +262,7 @@ class richnessDialog(QDialog, Ui_richnessDialog):
                 qgis.utils.iface.messageBar().pushMessage("Invalid field name", "The Feature Count field name cannot be more than 10 characters long.", QgsMessageBar.WARNING)
             else:
                 cluz_functions2.produceCountField(setupObject, countFieldName, selectedTypeList)
+                cluz_setup.removeThenAddPULayer(setupObject)
                 cluz_display.displayGraduatedLayer(setupObject, countFieldName, "Feature count", 2) #2 is yellow to green QGIS legend code
 
                 qgis.utils.iface.messageBar().pushMessage("Richness results", "The fields have been successfully added to the planning unit layer attribute table.", QgsMessageBar.INFO, 3)
@@ -455,6 +534,7 @@ class loadDialog(QDialog, Ui_loadDialog):
                         bestHeader = next(bestReader, None)  # skip the headers
                     if bestHeader == setupObject.bestHeadingFieldNames:
                         cluz_functions2.addBestMarxanOutputToPUShapefile(setupObject, bestPath, bestFieldName)
+                        cluz_setup.removeThenAddPULayer(setupObject)
                         bestShapefileName = bestFieldName
                         cluz_display.displayBestOutput(setupObject, bestFieldName, bestShapefileName)
                     else:
@@ -468,6 +548,7 @@ class loadDialog(QDialog, Ui_loadDialog):
                         summedHeader = next(summedReader, None)  # skip the headers
                     if summedHeader == setupObject.summedHeadingFieldNames:
                         cluz_functions2.addSummedMarxanOutputToPUShapefile(setupObject, summedPath, summedFieldName)
+                        cluz_setup.removeThenAddPULayer(setupObject)
                         summedShapefileName = summedFieldName
                         cluz_display.displayGraduatedLayer(setupObject, summedFieldName, summedShapefileName, 1) #1 is SF legend code
                     else:
@@ -731,3 +812,281 @@ class minpatchDialog(QDialog, Ui_minpatchDialog):
             self.close()
             if setupOKBool:
                 cluz_mpmain.runMinPatch(setupObject, minpatchObject, minpatchDataDict)
+
+
+class patchesDialog(QDialog, Ui_patchesDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+
+        QObject.connect(self.browseButton, SIGNAL("clicked()"), self.setPortfolioFilePath)
+        QObject.connect(self.okButton, SIGNAL("clicked()"), lambda: self.makePatchShapefile(setupObject))
+
+    def setPortfolioFilePath(self):
+        portfolioPathNameText = QFileDialog.getOpenFileName(self, 'Select Marxan or MinPatch portfolio file', '*.txt')
+        if portfolioPathNameText != "":
+            self.filePathlineEdit.setText(portfolioPathNameText)
+
+    def makePatchShapefile(self, setupObject):
+        portfolioPathNameText = self.filePathlineEdit.text()
+        portfolioOKBool, portfolioDict = cluz_functions2.makePatchPortfolioDict(portfolioPathNameText)
+        if portfolioOKBool:
+            cluz_functions2.makePatchPortfolioShapefile(setupObject, portfolioDict)
+        else:
+            cluz_functions2.portfolioNotOKErrorMessage()
+
+
+class portfolioDialog(QDialog, Ui_portfolioDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+
+        sfFieldList = cluz_functions2.makeSFFieldList(setupObject)
+        self.sfComboBox.addItems(sfFieldList)
+        self.sfComboBox.setEnabled(False)
+        self.sfFieldLabel.setEnabled(False)
+        self.sfRunsLabel.setVisible(False)
+        self.sfRunsLineEdit.setVisible(False)
+        self.equalityCheckBox.setVisible(False)
+
+        QObject.connect(self.okButton, SIGNAL("clicked()"), lambda: self.runReturnPortfolioDetails(setupObject))
+
+
+    def runReturnPortfolioDetails(self, setupObject):
+        portfolioPUDetailsDict = cluz_functions2.makePortfolioPUDetailsDict()
+        sfRunsValueIsOKBool = sfRunsValueIsOK(self)
+        if sfRunsValueIsOKBool:
+            if self.puDetailsCheckBox.isChecked():
+                portfolioPUDetailsDict = cluz_functions2.addStatusDetailsToPortfolioDict(setupObject, portfolioPUDetailsDict)
+            if self.spatialCheckBox.isChecked():
+                portfolioPUDetailsDict = cluz_functions2.addSpatialDetailsToPortfolioDict(setupObject, portfolioPUDetailsDict)
+            if self.patchTargetCheckBox.isChecked():
+                portfolioPUDetailsDict = cluz_functions2.addPatchFeatDetailsToPortfolioDict(setupObject, portfolioPUDetailsDict)
+            if self.sfCheckBox.isChecked():
+                sfFieldName = self.sfComboBox.currentText()
+                sfRunsValue = int(self.sfRunsLineEdit.text())
+                sfValueList = cluz_functions2.makeFullSFValueList(setupObject, sfFieldName)
+                if sfRunsValueNotLowerThanMaxSFValue(sfValueList, sfRunsValue):
+                    portfolioPUDetailsDict = cluz_functions2.addSFDetailsToPortfolioDict(portfolioPUDetailsDict, sfValueList, sfRunsValue)
+                else:
+                    sfRunsValueIsOKBool = False
+
+
+        if sfRunsValueIsOKBool:
+            self.close()
+
+            if len(portfolioPUDetailsDict) > 0:
+                self.portfolioResultsDialog = portfolioResultsDialog(self, portfolioPUDetailsDict, setupObject)
+                # show the dialog
+                self.portfolioResultsDialog.show()
+                # Run the dialog event loop
+                result = self.portfolioResultsDialog.exec_()
+
+
+def sfRunsValueIsOK(self):
+    sfRunsValueIsOK = True
+    if self.sfCheckBox.isChecked():
+        try:
+            sfRunsValue = int(self.sfRunsLineEdit.text())
+            if sfRunsValue < 1:
+                qgis.utils.iface.messageBar().pushMessage("Value error", "The number of runs value must be an integer greater than 0.", QgsMessageBar.WARNING)
+                sfRunsValueIsOK = False
+        except ValueError:
+            qgis.utils.iface.messageBar().pushMessage("Value error", "The number of runs value must be an integer greater than 0.", QgsMessageBar.WARNING)
+            sfRunsValueIsOK = False
+
+    return sfRunsValueIsOK
+
+
+def sfRunsValueNotLowerThanMaxSFValue(sfValueList, sfRunsValue):
+    sfRunsValueNotLowerThanMaxSFValue = True
+
+    if max(sfValueList) > sfRunsValue:
+        qgis.utils.iface.messageBar().pushMessage("Value error", "The specified number of runs value is less than the highest selection frequency value in the specified selection frequency field. Please check the number of runs used in the analysis and update this figure.", QgsMessageBar.WARNING)
+        sfRunsValueNotLowerThanMaxSFValue = False
+
+    return sfRunsValueNotLowerThanMaxSFValue
+
+
+class portfolioResultsDialog(QDialog, Ui_portfolioResultsDialog):
+    def __init__(self, iface, portfolioPUDetailsDict, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+        self.clip = QApplication.clipboard()
+        self.removeSuperfluousTabs(portfolioPUDetailsDict)
+        if portfolioPUDetailsDict["statusDetailsBool"]:
+            statusDataDict = portfolioPUDetailsDict["statusDataDict"]
+            self.makeStatusTab(setupObject, statusDataDict)
+        if portfolioPUDetailsDict["spatialDetailsBool"]:
+            spatialDataDict = portfolioPUDetailsDict["spatialDataDict"]
+            self.makeSpatialTab(setupObject, spatialDataDict)
+        if portfolioPUDetailsDict["sfDetailsBool"]:
+            sfDataDict = portfolioPUDetailsDict["sfDataDict"]
+            self.makeSfTab(sfDataDict)
+        if portfolioPUDetailsDict["patchFeatDetailsBool"]:
+            patchFeatDataDict = portfolioPUDetailsDict["patchFeatDataDict"]
+            self.makePatchFeatTab(setupObject, patchFeatDataDict)
+        if portfolioPUDetailsDict["peDetailsBool"]:
+            peDataDict = portfolioPUDetailsDict["peDataDict"]
+            self.makePETab(peDataDict)
+
+    def makeStatusTab(self, setupObject, statusDataDict):
+        self.statusTabTableWidget.clear()
+        self.statusTabTableWidget.setColumnCount(4)
+        rowNumber = 0
+        statusTypeList = ['Available', 'Conserved', 'Earmarked', 'Excluded', 'Portfolio', 'Region']
+        for statusType in statusTypeList:
+            self.statusTabTableWidget.insertRow(rowNumber)
+            statusTableItem = QTableWidgetItem(statusType)
+            costString, areaString, countString = cluz_functions2.returnStatusTabStringValues(setupObject, statusDataDict, statusType)
+            costTableItem = QTableWidgetItem(costString)
+            areaTableItem = QTableWidgetItem(areaString)
+            countTableItem = QTableWidgetItem(countString)
+            self.statusTabTableWidget.setItem(rowNumber, 0, statusTableItem)
+            self.statusTabTableWidget.setItem(rowNumber, 1, costTableItem)
+            self.statusTabTableWidget.setItem(rowNumber, 2, areaTableItem)
+            self.statusTabTableWidget.setItem(rowNumber, 3, countTableItem)
+            rowNumber += 1
+
+        statusHeaderList = ['Status', 'Total cost', 'Total area', 'No. of planning units']
+        self.statusTabTableWidget.setHorizontalHeaderLabels(statusHeaderList)
+        for aColValue in range(len(statusHeaderList)):
+            self.statusTabTableWidget.resizeColumnToContents(aColValue)
+
+    def makeSpatialTab(self, setupObject, spatialDataDict):
+        self.spatialTabTableWidget.clear()
+        self.spatialTabTableWidget.setColumnCount(2)
+        rowNumber = 0
+        spatialTableItemDict = cluz_functions2.makeSpatialTableItemDict(setupObject, spatialDataDict)
+        for spatialRowOrder in range(0, 5):
+            self.spatialTabTableWidget.insertRow(rowNumber)
+            descTableItem = QTableWidgetItem(spatialTableItemDict[spatialRowOrder][0])
+            valueTableItem = QTableWidgetItem(spatialTableItemDict[spatialRowOrder][1])
+            self.spatialTabTableWidget.setItem(rowNumber, 0, descTableItem)
+            self.spatialTabTableWidget.setItem(rowNumber, 1, valueTableItem)
+            rowNumber += 1
+
+        spatialHeaderList = ['Metric', 'Value']
+        self.spatialTabTableWidget.setHorizontalHeaderLabels(spatialHeaderList)
+        for aColValue in range(len(spatialHeaderList)):
+            self.spatialTabTableWidget.resizeColumnToContents(aColValue)
+
+
+    def makeSfTab(self, sfDataDict):
+        self.sfTabTableWidget.clear()
+        self.sfTabTableWidget.setColumnCount(2)
+        rowNumber = 0
+        sfDictKeyList = range(0, len(sfDataDict))
+        for sfDictKey in sfDictKeyList:
+            self.sfTabTableWidget.insertRow(rowNumber)
+            descTableItem = QTableWidgetItem(sfDataDict[sfDictKey][0])
+            valueTableItem = QTableWidgetItem(sfDataDict[sfDictKey][1])
+            self.sfTabTableWidget.setItem(rowNumber, 0, descTableItem)
+            self.sfTabTableWidget.setItem(rowNumber, 1, valueTableItem)
+            rowNumber += 1
+
+        sfHeaderList = ['Selection frequency value range', 'Number of planning units']
+        self.sfTabTableWidget.setHorizontalHeaderLabels(sfHeaderList)
+        for aColValue in range(len(sfHeaderList)):
+            self.sfTabTableWidget.resizeColumnToContents(aColValue)
+
+
+    def makePatchFeatTab(self, setupObject, patchFeatDataDict):
+        self.patchFeatTabTableWidget.clear()
+        self.patchFeatTabTableWidget.setColumnCount(3)
+        rowNumber = 0
+        featIDList = setupObject.targetDict.keys()
+        featIDList.sort()
+        for featID in featIDList:
+            self.patchFeatTabTableWidget.insertRow(rowNumber)
+            featIDTableItem = QTableWidgetItem(str(featID))
+            featNameTableItem = QTableWidgetItem(setupObject.targetDict[featID][0])
+            try:
+                countTableItem = QTableWidgetItem(str(patchFeatDataDict[featID]))
+            except KeyError:
+                countTableItem = QTableWidgetItem(str(0))
+            self.patchFeatTabTableWidget.setItem(rowNumber, 0, featIDTableItem)
+            self.patchFeatTabTableWidget.setItem(rowNumber, 1, featNameTableItem)
+            self.patchFeatTabTableWidget.setItem(rowNumber, 2, countTableItem)
+            rowNumber += 1
+
+        sfHeaderList = ['Feature ID', 'Feature name', "Number of patches"]
+        self.patchFeatTabTableWidget.setHorizontalHeaderLabels(sfHeaderList)
+        for aColValue in range(len(sfHeaderList)):
+            self.patchFeatTabTableWidget.resizeColumnToContents(aColValue)
+
+
+    def makePETab(self, sfDataDict):
+        self.peTabTableWidget.clear()
+        # self.sfTabTableWidget.setColumnCount(2)
+        # rowNumber = 0
+        # sfDictKeyList = range(0, len(sfDataDict))
+        # for sfDictKey in sfDictKeyList:
+        #     self.sfTabTableWidget.insertRow(rowNumber)
+        #     descTableItem = QTableWidgetItem(sfDataDict[sfDictKey][0])
+        #     valueTableItem = QTableWidgetItem(sfDataDict[sfDictKey][1])
+        #     self.sfTabTableWidget.setItem(rowNumber, 0, descTableItem)
+        #     self.sfTabTableWidget.setItem(rowNumber, 1, valueTableItem)
+        #     rowNumber += 1
+        #
+        # sfHeaderList = ['Selection frequency value range', 'Number of planning units']
+        # self.sfTabTableWidget.setHorizontalHeaderLabels(sfHeaderList)
+        # for aColValue in range(len(sfHeaderList)):
+        #     self.sfTabTableWidget.resizeColumnToContents(aColValue)
+
+
+
+    def removeSuperfluousTabs(self, portfolioPUDetailsDict):
+        tabNameRemoveList = list()
+        if not portfolioPUDetailsDict["statusDetailsBool"]:
+            tabNameRemoveList.append('Status results')
+        if not portfolioPUDetailsDict["spatialDetailsBool"]:
+            tabNameRemoveList.append('Spatial results')
+        if not portfolioPUDetailsDict["sfDetailsBool"]:
+            tabNameRemoveList.append('Selection frequency results')
+        if not portfolioPUDetailsDict["patchFeatDetailsBool"]:
+            tabNameRemoveList.append('Patches per feature')
+        if not portfolioPUDetailsDict["peDetailsBool"]:
+            tabNameRemoveList.append('Protection equality')
+
+        for aIter in range(0, len(tabNameRemoveList)):
+            for tabIndex in range(0, self.tabWidget.count()):
+                tabName = self.tabWidget.tabText(tabIndex)
+                if tabName in tabNameRemoveList:
+                    self.tabWidget.removeTab(tabIndex)
+                    tabNameRemoveList.remove(tabName)
+
+
+    # http://stackoverflow.com/questions/24971305/copy-pyqt-table-selection-including-column-and-row-headers
+    def keyPressEvent(self, e):
+        if (e.modifiers() & Qt.ControlModifier):
+            tabName = self.tabWidget.tabText(self.tabWidget.currentIndex())
+            if tabName == 'Status results':
+                selected = self.statusTabTableWidget.selectedRanges()
+            elif tabName == 'Spatial results':
+                selected = self.spatialTabTableWidget.selectedRanges()
+            elif tabName == 'Selection frequency results':
+                selected = self.sfTabTableWidget.selectedRanges()
+            elif tabName == 'Patches per feature':
+                selected = self.patchFeatTabTableWidget.selectedRanges()
+
+            if e.key() == Qt.Key_C: #copy
+                s = ""
+                for r in xrange(selected[0].topRow(), selected[0].bottomRow() + 1):
+                    for c in xrange(selected[0].leftColumn(), selected[0].rightColumn()+1):
+                        try:
+                            if tabName == 'Status results':
+                                s += str(self.statusTabTableWidget.item(r, c).text()) + "\t"
+                            elif tabName == 'Spatial results':
+                                s += str(self.spatialTabTableWidget.item(r, c).text()) + "\t"
+                            elif tabName == 'Selection frequency results':
+                                s += str(self.sfTabTableWidget.item(r, c).text()) + "\t"
+                            elif tabName == 'Patches per feature':
+                                s += str(self.patchFeatTabTableWidget.item(r, c).text()) + "\t"
+                        except AttributeError:
+                            s += "\t"
+                    s = s[:-1] + "\n" #eliminate last '\t'
+                self.clip.setText(s)

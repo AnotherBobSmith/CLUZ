@@ -117,6 +117,7 @@ def makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor):
             polyBool = True
 
         qgis.utils.iface.mainWindow().statusBar().showMessage("Calculating data from layer " + str(layerNumber) + "...")
+        attributeFeatureError = False
         for outputFeature in outputFeatures:
             outputAttributes = outputFeature.attributes()
             unitID = outputAttributes[outputIDField]
@@ -125,11 +126,17 @@ def makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor):
 
             #Produce intersect of lines
             if lineBool:
-                finalShapeAmount = calcFeatLineLengthInPU(outputFeature, convFactor, decPrec)
+                try:
+                    finalShapeAmount = calcFeatLineLengthInPU(outputFeature, convFactor, decPrec)
+                except AttributeError:
+                    finalShapeAmount = -1
 
             #Produce intersect of polygons
             if polyBool:
-                finalShapeAmount = calcFeatPolygonAreaInPU(outputFeature, convFactor, decPrec)
+                try:
+                    finalShapeAmount = calcFeatPolygonAreaInPU(outputFeature, convFactor, decPrec)
+                except AttributeError:
+                    finalShapeAmount = -1
 
             if finalShapeAmount > 0:
                 try:
@@ -143,6 +150,11 @@ def makeVecAddAbundDict(setupObject, layerList, idFieldName, convFactor):
                 addAmount += finalShapeAmount
                 puAddAbundDict[featID] = addAmount
                 addAbundDict[unitID] = puAddAbundDict
+            else:
+                attributeFeatureError = True
+
+        if attributeFeatureError:
+             qgis.utils.iface.messageBar().pushMessage("Layer warning: ", "Layer " + str(aLayer.name()) + " contains at least one feature that produces fragments with no spatial characteristics when intersected with the planning units.", QgsMessageBar.WARNING)
         layerNumber += 1
 
     qgis.utils.iface.mainWindow().statusBar().showMessage("")

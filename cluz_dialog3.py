@@ -46,6 +46,7 @@ class targetDialog(QDialog, Ui_targetDialog):
         QDialog.__init__(self)
         self.iface = iface
         self.setupUi(self)
+        self.clip = QApplication.clipboard()
         targetDict = cluz_setup.makeTargetDict(setupObject)
         if targetDict != "blank":
             setupObject.targetDict = targetDict
@@ -77,8 +78,7 @@ class targetDialog(QDialog, Ui_targetDialog):
                 else:
                     limboPCValue = consValue / targetValue
                     limboPCValue *= 100
-                    limboPCValue = round(float(limboPCValue), decPrec)
-                    limboPCValue = format(limboPCValue, "." + str(decPrec) + "f")
+                    limboPCValue = cluz_setup.returnRoundedValue(setupObject, limboPCValue)
 
                 if float(limboPCValue) != float(pcValue):
                     pcValueUpdate = True
@@ -94,6 +94,25 @@ class targetDialog(QDialog, Ui_targetDialog):
 
         if pcValueUpdate == True:
             cluz_setup.updateTargetCSVFromTargetDict(setupObject, setupObject.targetDict)
+
+
+    # http://stackoverflow.com/questions/24971305/copy-pyqt-table-selection-including-column-and-row-headers
+    def keyPressEvent(self, e):
+        if (e.modifiers() & Qt.ControlModifier):
+            selected = self.targetTableWidget.selectedRanges()
+
+            if e.key() == Qt.Key_C: #copy
+                s = ""
+
+                for r in xrange(selected[0].topRow(), selected[0].bottomRow() + 1):
+                    for c in xrange(selected[0].leftColumn(), selected[0].rightColumn()+1):
+                        try:
+                            s += str(self.targetTableWidget.item(r, c).text()) + "\t"
+                        except AttributeError:
+                            s += "\t"
+                    s = s[:-1] + "\n" #eliminate last '\t'
+                self.clip.setText(s)
+
 
 def addTargetTableRow(self, aRow, targetHeaderList, decPrecHeaderNameList, insertRowNumber, decPrec):
     self.targetTableWidget.insertRow(insertRowNumber)
@@ -156,6 +175,7 @@ class abundDialog(QDialog, Ui_abundDialog):
         QDialog.__init__(self)
         self.iface = iface
         self.setupUi(self)
+        self.clip = QApplication.clipboard()
         self.loadAbundDictData(setupObject, selectedFeatIDList)
 
     def loadAbundDictData(self, setupObject, selectedFeatIDList):
@@ -195,6 +215,24 @@ class abundDialog(QDialog, Ui_abundDialog):
 
         for aColValue in range(len(abundHeaderList)):
             self.abundTableWidget.resizeColumnToContents(aColValue)
+
+
+    # http://stackoverflow.com/questions/24971305/copy-pyqt-table-selection-including-column-and-row-headers
+    def keyPressEvent(self, e):
+        if (e.modifiers() & Qt.ControlModifier):
+            selected = self.abundTableWidget.selectedRanges()
+
+            if e.key() == Qt.Key_C: #copy
+                s = ""
+                for r in xrange(selected[0].topRow(), selected[0].bottomRow() + 1):
+                    for c in xrange(selected[0].leftColumn(), selected[0].rightColumn()+1):
+                        try:
+                            s += str(self.abundTableWidget.item(r, c).text()) + "\t"
+                        except AttributeError:
+                            s += "\t"
+                    s = s[:-1] + "\n" #eliminate last '\t'
+                self.clip.setText(s)
+
 
 class changeStatusDialog(QDialog, Ui_ChangeStatusDialog):
     def __init__(self, iface, setupObject):
@@ -255,49 +293,20 @@ class changeStatusDialog(QDialog, Ui_ChangeStatusDialog):
 class identifyDialog(QDialog, Ui_identifyDialog):
     def __init__(self, iface, setupObject, point):
         QDialog.__init__(self)
-        self.targetDict = setupObject.targetDict
-        self.abundPUKeyDict = setupObject.abundPUKeyDict
-        self.puPath = setupObject.puPath
         self.iface = iface
         self.setupUi(self)
-        self.point = point
 
-        identDict, targetMetDict = self.makeIdentifyData()
+        selectedPUIDList = cluz_functions3.returnPointPUIDList(setupObject, point)
+        identDict, targetMetDict = cluz_functions3.makeIdentifyData(setupObject, selectedPUIDList)
+        titleString = cluz_functions3.setIdentifyDialogWindowTitle(selectedPUIDList, identDict)
+
         if len(identDict.keys()) > 0:
             self.identDict = identDict
             self.targetMetDict = targetMetDict
             self.showIdentifyData()
+            self.setWindowTitle(titleString)
 
-    def makeIdentifyData(self):
-        pntGeom = QgsGeometry.fromPoint(self.point)
-
-        puLayer = QgsVectorLayer(self.puPath, "Planning units", "ogr")
-        puProvider = puLayer.dataProvider()
-        puIdFieldOrder = puProvider.fieldNameIndex("Unit_ID")
-
-        selectList = []
-        for feature in puLayer.getFeatures():
-            if feature.geometry().intersects(pntGeom):
-                selectList.append(feature.id())
-
-        identDict = {}
-        targetMetDict = {}
-        if len(selectList) > 0:
-            featID = selectList[0]
-            puRequest = QgsFeatureRequest().setFilterFids([featID])
-            for puFeature in puLayer.getFeatures(puRequest):
-                puAttributes = puFeature.attributes()
-                puID = puAttributes[puIdFieldOrder]
-                try:
-                    puAbundDict = self.abundPUKeyDict[puID]
-                    identDict = cluz_functions3.makeIdentDict(self.targetDict, targetMetDict, puAbundDict)
-                    titleString = "Planning unit " + str(puID) + ": list of features"
-                except KeyError:
-                    identDict = {}
-                    titleString = "Planning unit " + str(puID) + ": does not contain any features"
-                self.setWindowTitle(titleString)
-
-        return identDict, targetMetDict
+        self.setWindowTitle(titleString)
 
     def showIdentifyData(self):
         self.identifyTableWidget.clear()
