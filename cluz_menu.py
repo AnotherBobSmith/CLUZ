@@ -27,6 +27,7 @@ from qgis.gui import *
 import qgis
 
 import os.path
+import sys
 
 import cluz_setup
 import cluz_functions1
@@ -43,12 +44,15 @@ from cluz_dialog1 import convertVecDialog
 from cluz_dialog1 import convertCsvDialog
 from cluz_dialog1 import removeDialog
 from cluz_dialog2 import distributionDialog
+from cluz_dialog2 import identifySelectedDialog
 from cluz_dialog2 import richnessDialog
+from cluz_dialog2 import portfolioDialog
 from cluz_dialog2 import inputsDialog
 from cluz_dialog2 import marxanDialog
 from cluz_dialog2 import loadDialog
 from cluz_dialog2 import calibrateDialog
 from cluz_dialog2 import minpatchDialog
+from cluz_dialog2 import patchesDialog
 from cluz_dialog3 import targetDialog
 from cluz_dialog3 import abundSelectDialog
 from cluz_dialog3 import metDialog
@@ -97,13 +101,17 @@ class Cluz:
         self.TroubleAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_trouble.png"), "Troubleshoot all CLUZ files", self.iface.mainWindow())
 
         self.DistributionAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_dist.png"), "Display distributions of conservation features", self.iface.mainWindow())
+        self.IdentifySelectedAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_selident.png"), "Identify features in selected units", self.iface.mainWindow())
         self.RichnessAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_richness.png"), "Calculate richness scores", self.iface.mainWindow())
+        self.PortfolioAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_portfolio.png"), "Calculate portfolio characteristics", self.iface.mainWindow())
 
         self.InputsAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_marxcreate.png"), "Create Marxan input files", self.iface.mainWindow())
         self.MarxanAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_marxan.png"), "Launch Marxan", self.iface.mainWindow())
         self.LoadAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_load.png"), "Load previous Marxan outputs", self.iface.mainWindow())
         self.CalibrateAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_calibrate.png"), "Calibrate Marxan parameters", self.iface.mainWindow())
+
         self.MinPatchAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_minpatch.png"), "Launch MinPatch", self.iface.mainWindow())
+        # self.PatchesAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_portfolio.png"), "Show patches from Marxan or MinPatch output file", self.iface.mainWindow())
 
         self.TargetAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_target.png"), "Open target table", self.iface.mainWindow())
         self.AbundAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_abund.png"), "Open abundance table", self.iface.mainWindow())
@@ -124,13 +132,17 @@ class Cluz:
         self.TroubleAction.triggered.connect(lambda: self.runTroubleShoot(setupObject))
 
         self.DistributionAction.triggered.connect(lambda: self.runShowDistributionFeatures(setupObject))
+        self.IdentifySelectedAction.triggered.connect(lambda: self.runIdentifyFeaturesInSelected(setupObject))
         self.RichnessAction.triggered.connect(lambda: self.calcRichness(setupObject))
+        self.PortfolioAction.triggered.connect(lambda: self.calcPortfolioDetails(setupObject))
 
         self.InputsAction.triggered.connect(lambda: self.runCreateMarxanInputFiles(setupObject))
         self.MarxanAction.triggered.connect(lambda: self.runMarxan(setupObject, self.TargetsMetAction))
         self.LoadAction.triggered.connect(lambda: self.loadPrevMarxanResults(setupObject))
         self.CalibrateAction.triggered.connect(lambda: self.runCalibrate(setupObject))
+
         self.MinPatchAction.triggered.connect(lambda: self.runMinPatch(setupObject))
+        # self.PatchesAction.triggered.connect(lambda: self.runShowPatches(setupObject))
 
         self.TargetAction.triggered.connect(lambda: self.runTargetDialog(setupObject))
         self.AbundAction.triggered.connect(lambda: self.runAbundSelectDialog(setupObject))
@@ -150,7 +162,9 @@ class Cluz:
         self.cluz_menu.addAction(self.TroubleAction)
         self.cluz_menu.addSeparator()
         self.cluz_menu.addAction(self.DistributionAction)
+        self.cluz_menu.addAction(self.IdentifySelectedAction)
         self.cluz_menu.addAction(self.RichnessAction)
+        self.cluz_menu.addAction(self.PortfolioAction)
         self.cluz_menu.addSeparator()
         self.cluz_menu.addAction(self.InputsAction)
         self.cluz_menu.addAction(self.MarxanAction)
@@ -158,6 +172,7 @@ class Cluz:
         self.cluz_menu.addAction(self.CalibrateAction)
         self.cluz_menu.addSeparator()
         self.cluz_menu.addAction(self.MinPatchAction)
+        # self.cluz_menu.addAction(self.PatchesAction)
 
         # Add actions as buttons on menu bar
         self.cluz_toolbar.addAction(self.TargetAction)
@@ -176,7 +191,7 @@ class Cluz:
 
     def runAddPULayerToView(self, setupObject):
         if cluz_setup.checkPULayerPresent() == False:
-            cluz_setup.addPlanningUnit(self, setupObject)
+            cluz_setup.addPULayer(self, setupObject)
 
     def runStartDialog(self, setupObject):
         self.startDialog = startDialog(self, setupObject)
@@ -254,7 +269,7 @@ class Cluz:
                 setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
 
             cluz_setup.createAndCheckCLUZFiles(setupObject)
-            cluz_setup.checkAddPlanningUnit(setupObject)
+            cluz_setup.checkAddPULayer(setupObject)
             newConTotDict = cluz_functions1.returnConTotDict(setupObject)
             targetDict = cluz_functions1.updateConTotFieldsTargetDict(setupObject, newConTotDict)
             setupObject.targetDict = targetDict
@@ -271,6 +286,7 @@ class Cluz:
             if setupObject.abundPUKeyDict == "blank":
                 setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
             cluz_functions1.troubleShootCLUZFiles(setupObject)
+            cluz_randomshit.jessMaps()
 
     def runShowDistributionFeatures(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
@@ -287,6 +303,23 @@ class Cluz:
             # Run the dialog event loop
             result = self.distributionDialog.exec_()
 
+
+    def runIdentifyFeaturesInSelected(self, setupObject):
+        checkSetupFileLoaded(self, setupObject)
+        openSetupDialogIfSetupFilesIncorrect(self, setupObject)
+        checkCreateAddFiles(setupObject)
+
+        if setupObject.setupStatus == "files_checked":
+            if setupObject.abundPUKeyDict == "blank":
+                setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
+
+            self.Ui_identifySelectedDialog = identifySelectedDialog(self, setupObject)
+            # show the dialog
+            self.Ui_identifySelectedDialog.show()
+            # Run the dialog event loop
+            result = self.Ui_identifySelectedDialog.exec_()
+
+
     def calcRichness(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
         openSetupDialogIfSetupFilesIncorrect(self, setupObject)
@@ -301,6 +334,18 @@ class Cluz:
             self.richnessDialog.show()
             # Run the dialog event loop
             result = self.richnessDialog.exec_()
+
+    def calcPortfolioDetails(self, setupObject):
+        checkSetupFileLoaded(self, setupObject)
+        openSetupDialogIfSetupFilesIncorrect(self, setupObject)
+        checkCreateAddFiles(setupObject)
+
+        if setupObject.setupStatus == "files_checked":
+            self.portfolioDialog = portfolioDialog(self, setupObject)
+            # show the dialog
+            self.portfolioDialog.show()
+            # Run the dialog event loop
+            result = self.portfolioDialog.exec_()
 
     def runCreateMarxanInputFiles(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
@@ -323,26 +368,29 @@ class Cluz:
             cluz_setup.checkCreateSporderDat(setupObject)
             marxanBool = True
             marxanPath = setupObject.marxanPath
-            if marxanPath == "blank":
-                QMessageBox.critical(None, "Marxan path missing", "The location of Marxan has not been specified. CLUZ will now open the CLUZ setup dialog box, so please specify a correct version.")
-                marxanBool = False
-            if os.path.exists(marxanPath) == False:
-                QMessageBox.critical(None, "Incorrect Marxan path", "Marxan cannot be found at the specified pathway. CLUZ will now open the CLUZ setup dialog box, so please specify a correct version.")
-                marxanBool = False
+            if sys.platform.startswith('darwin'):
+                QMessageBox.critical(None, "CLUZ and MacOS", "The current version of CLUZ cannot run Marxan on Mac computers. Sorry about that. Instead, you can run Marxan indepedently and load the results into CLUZ.")
+            else:
+                if marxanPath == "blank":
+                    QMessageBox.critical(None, "Marxan path missing", "The location of Marxan has not been specified. CLUZ will now open the CLUZ setup dialog box, so please specify a correct version.")
+                    marxanBool = False
+                if os.path.exists(marxanPath) == False:
+                    QMessageBox.critical(None, "Incorrect Marxan path", "Marxan cannot be found at the specified pathway. CLUZ will now open the CLUZ setup dialog box, so please specify a correct version.")
+                    marxanBool = False
 
-            if marxanBool == False:
-                self.setupDialog = setupDialog(self, setupObject)
-                # show the dialog
-                self.setupDialog.show()
-                # Run the dialog event loop
-                result = self.setupDialog.exec_()
+                if marxanBool == False:
+                    self.setupDialog = setupDialog(self, setupObject)
+                    # show the dialog
+                    self.setupDialog.show()
+                    # Run the dialog event loop
+                    result = self.setupDialog.exec_()
 
-            if marxanBool == True and setupObject.setupStatus == "files_checked":
-                self.marxanDialog = marxanDialog(self, setupObject, targetsMetAction)
-                # show the dialog
-                self.marxanDialog.show()
-                # Run the dialog event loop
-                result = self.marxanDialog.exec_()
+                if marxanBool == True and setupObject.setupStatus == "files_checked":
+                    self.marxanDialog = marxanDialog(self, setupObject, targetsMetAction)
+                    # show the dialog
+                    self.marxanDialog.show()
+                    # Run the dialog event loop
+                    result = self.marxanDialog.exec_()
 
     def loadPrevMarxanResults(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
@@ -397,6 +445,20 @@ class Cluz:
             self.minpatchDialog.show()
             # Run the dialog event loop
             result = self.minpatchDialog.exec_()
+
+
+    def runShowPatches(self, setupObject):
+        checkSetupFileLoaded(self, setupObject)
+        openSetupDialogIfSetupFilesIncorrect(self, setupObject)
+        checkCreateAddFiles(setupObject)
+
+        if setupObject.setupStatus == "files_checked":
+            self.patchesDialog = patchesDialog(self, setupObject)
+            # show the dialog
+            self.patchesDialog.show()
+            # Run the dialog event loop
+            result = self.patchesDialog.exec_()
+
 
     def runTargetDialog(self,setupObject):
         checkSetupFileLoaded(self, setupObject)
@@ -478,27 +540,30 @@ class Cluz:
 
 # Checks whether setup file has been loaded
 def checkSetupFileLoaded(self, setupObject):
-    if setupObject.setupPath == "blank":
-        self.startDialog = startDialog(self, setupObject)
-        # show the dialog
-        self.startDialog.show()
-        # Run the dialog event loop
-        result = self.startDialog.exec_()
-
-        if setupObject.setupAction == "new":
-            self.setupDialog = setupDialog(self, setupObject)
+    if setupObject.overRide:
+        cluz_setup.updateSetupObjectFromSetupFile(setupObject, "C:\\Program Files\\QGIS Lyon\\bin\\ex1.clz")
+    else:
+        if setupObject.setupPath == "blank":
+            self.startDialog = startDialog(self, setupObject)
             # show the dialog
-            self.setupDialog.show()
+            self.startDialog.show()
             # Run the dialog event loop
-            result = self.setupDialog.exec_()
-        elif setupObject.setupAction == "open":
-            setupPathNameText = QFileDialog.getOpenFileName(None, 'Open existing CLUZ setup file', '*.clz')
-            try:
-                cluz_setup.updateSetupObjectFromSetupFile(setupObject, setupPathNameText)
-            except IOError:
-                pass
-        else:
-            self.startDialog.close()
+            result = self.startDialog.exec_()
+
+            if setupObject.setupAction == "new":
+                self.setupDialog = setupDialog(self, setupObject)
+                # show the dialog
+                self.setupDialog.show()
+                # Run the dialog event loop
+                result = self.setupDialog.exec_()
+            elif setupObject.setupAction == "open":
+                setupPathNameText = QFileDialog.getOpenFileName(None, 'Open existing CLUZ setup file', '*.clz')
+                try:
+                    cluz_setup.updateSetupObjectFromSetupFile(setupObject, setupPathNameText)
+                except IOError:
+                    pass
+            else:
+                self.startDialog.close()
 
 # Checks whether setup, pu, target and abundance file paths are correct. If they 
 def openSetupDialogIfSetupFilesIncorrect(self, setupObject):
@@ -511,4 +576,4 @@ def openSetupDialogIfSetupFilesIncorrect(self, setupObject):
 
 def checkCreateAddFiles(setupObject):
     cluz_setup.createAndCheckCLUZFiles(setupObject)
-    cluz_setup.checkAddPlanningUnit(setupObject)
+    cluz_setup.checkAddPULayer(setupObject)
