@@ -25,7 +25,6 @@ import csv
 import stats
 
 import cluz_mpfunctions
-import cluz_setup
 
 
 def makePatchStatsDict(patchDict, minpatchDataDict):

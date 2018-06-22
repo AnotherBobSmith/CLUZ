@@ -32,39 +32,11 @@ import time
 import cluz_display
 
 
-
-def xxxSaveTextToFile(outputName, anItem):
-    baseName = 'C:\Users\Bob\.qgis2\python\plugins\Cluz\hope.txt'
-    pathName = baseName.replace('hope',outputName)
-    textFile = open(pathName,'wb')
-    finalString = ""
-    finalString += str(anItem)
-    textFile.writelines(finalString)
-    textFile.close()
-
-def xxxSavePortfolioToFile(outputName, portfolioDict):
-    baseName = 'C:\Users\Bob\.qgis2\python\plugins\Cluz\hope.txt'
-    pathName = baseName.replace('hope', outputName)
-    headerList = ["ID", "Status"]
-    portfolioWriter = csv.writer(open(pathName, "wb"))
-    portfolioWriter.writerow(headerList)
-
-    for puID in portfolioDict:
-        portfolioWriter.writerow([puID, portfolioDict[puID][1]])
-
-
-def removePrefixMakeIDValue(aString):
-    numList = re.findall(r'[0-9]+', aString)
-    revNumList = numList[::-1]
-    if len(revNumList) > 0:
-        idValue = int(revNumList[0])
-    else:
-        idValue = ""
-
-    return idValue
-
 class CluzSetupObject:
     def __init__(self):
+        #################################################
+        self.overRide = False  ###########################
+        #################################################
 
         self.setupStatus = "blank" #Can be "values_set", "values_checked" or "files_checked"
         self.setupAction = "blank" #Can be be "new" or "open"
@@ -95,9 +67,26 @@ class CluzSetupObject:
 
         self.abundPUKeyDict = "blank"
 
-        #################################################
-        self.overRide = False  ###########################
-        #################################################
+
+def xxxSaveTextToFile(outputName, anItem):
+    baseName = 'C:\Users\Bob\.qgis2\python\plugins\Cluz\hope.txt'
+    pathName = baseName.replace('hope',outputName)
+    textFile = open(pathName,'wb')
+    finalString = ""
+    finalString += str(anItem)
+    textFile.writelines(finalString)
+    textFile.close()
+
+
+def removePrefixMakeIDValue(aString):
+    numList = re.findall(r'[0-9]+', aString)
+    revNumList = numList[::-1]
+    if len(revNumList) > 0:
+        idValue = int(revNumList[0])
+    else:
+        idValue = ""
+
+    return idValue
 
 
 class MinPatchObject:
@@ -391,7 +380,7 @@ def createAndCheckPuLayerFile(setupObject, checkBool):
 
 
 def makeTargetDict(setupObject):
-    targetDict = {}
+    targetDict = dict()
     targetCSVFilePath = setupObject.targetPath
     try:
         with open(targetCSVFilePath, 'rb') as f:

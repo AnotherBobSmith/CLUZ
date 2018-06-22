@@ -30,7 +30,7 @@ import cluz_mpoutputs
 import cluz_mpsetup
 import cluz_functions2
 import cluz_display
-import cluz_setup
+
 
 def runMinPatch(setupObject, minpatchObject, minpatchDataDict):
     marxanNameString = minpatchObject.marxanFileName + "_r"

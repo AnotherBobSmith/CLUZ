@@ -371,10 +371,10 @@ def makeBlankCLUZFiles(shapePath, convFactor, costAsAreaBool, inputPath, targetP
     unitStatusField = puProvider.addAttributes([QgsField("Status", QVariant.String)])
     puLayer.updateFields()
 
-    unitIDFieldOrder = puProvider.fieldNameIndex("Unit_ID")
-    puAreaFieldOrder = puProvider.fieldNameIndex("Area")
-    puCostFieldOrder = puProvider.fieldNameIndex("Cost")
-    unitStatusFieldOrder = puProvider.fieldNameIndex("Status")
+    unitIDFieldIndex = puProvider.fieldNameIndex("Unit_ID")
+    puAreaFieldIndex = puProvider.fieldNameIndex("Area")
+    puCostFieldIndex = puProvider.fieldNameIndex("Cost")
+    statusFieldIndex = puProvider.fieldNameIndex("Status")
 
     puLayer.startEditing()
     puFeatures = puLayer.getFeatures()
@@ -389,10 +389,10 @@ def makeBlankCLUZFiles(shapePath, convFactor, costAsAreaBool, inputPath, targetP
         else:
             puCost = 0
 
-        puLayer.changeAttributeValue(puRow, unitIDFieldOrder, unitIDValue, True)
-        puLayer.changeAttributeValue(puRow, puCostFieldOrder, puCost, True)
-        puLayer.changeAttributeValue(puRow, puAreaFieldOrder, finalPUArea, True)
-        puLayer.changeAttributeValue(puRow, unitStatusFieldOrder, "Available", True)
+        puLayer.changeAttributeValue(puRow, unitIDFieldIndex, unitIDValue, True)
+        puLayer.changeAttributeValue(puRow, puCostFieldIndex, puCost, True)
+        puLayer.changeAttributeValue(puRow, puAreaFieldIndex, finalPUArea, True)
+        puLayer.changeAttributeValue(puRow, statusFieldIndex, "Available", True)
 
     puLayer.commitChanges()
 

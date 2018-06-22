@@ -28,6 +28,7 @@ import qgis
 from cluz_form_distribution import Ui_distributionDialog
 from cluz_form_identify_selected import Ui_identifySelectedDialog
 from cluz_form_richness import Ui_richnessDialog
+from cluz_form_irrep import Ui_irrepDialog
 from cluz_form_portfolio import Ui_portfolioDialog
 from cluz_form_portfolio_results import Ui_portfolioResultsDialog
 from cluz_form_inputs import Ui_inputsDialog
@@ -47,6 +48,8 @@ import cluz_functions2
 import cluz_display
 import cluz_mpmain
 import cluz_mpsetup
+import cluz_irrep
+import cluz_messages
 
 from cluz_setup import MinPatchObject
 
@@ -174,81 +177,29 @@ class richnessDialog(QDialog, Ui_richnessDialog):
         self.iface = iface
         self.setupUi(self)
 
-        (countName, rangeName, irrepName) = self.returnInitialFieldNames(setupObject)
-        self.countLineEdit.setText(countName)
-        self.rangeLineEdit.setText(rangeName)
-        self.irrepLineEdit.setText(irrepName)
+        finalCountFieldName = cluz_functions2.returnInitialFieldName(setupObject, "F_COUNT")
+        finalRangeFieldName = cluz_functions2.returnInitialFieldName(setupObject, "RES_RANGE")
+        self.countLineEdit.setText(finalCountFieldName)
+        self.rangeLineEdit.setText(finalRangeFieldName)
 
-        self.irrepBox.setVisible(False)
-        self.irrepLabel.setVisible(False)
-        self.irrepLineEdit.setVisible(False)
-
-        typeList = self.produceTypeTextList(setupObject)
+        typeList = cluz_functions2.produceTypeTextList(setupObject)
         self.typeListWidget.addItems(typeList)
 
         QObject.connect(self.okButton, SIGNAL("clicked()"), lambda: self.createRichnessResults(setupObject))
 
-    def returnInitialFieldNames(self, setupObject):
-        puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
-        fieldNameList = [field.name() for field in puLayer.pendingFields()]
-
-        countName = "F_COUNT"
-        countSuffix = ""
-        if countName in fieldNameList:
-            countSuffix = 1
-            while (countName + str(countSuffix)) in fieldNameList:
-                countSuffix += 1
-        finalCountName = countName + str(countSuffix)
-
-        rangeName = "R_RICH"
-        rangeSuffix = ""
-        if rangeName in fieldNameList:
-            rangeSuffix = 1
-            while (rangeName + str(rangeSuffix)) in fieldNameList:
-                rangeSuffix += 1
-        finalRangeName = rangeName + str(rangeSuffix)
-
-        irrepName = "IRREP"
-        irrepSuffix = ""
-        if irrepName in fieldNameList:
-            irrepSuffix = 1
-            while (irrepName + str(irrepSuffix)) in fieldNameList:
-                irrepSuffix += 1
-        finalIrrepName = irrepName + str(irrepSuffix)
-
-        return (finalCountName, finalRangeName, finalIrrepName)
-
-    def produceTypeTextList(self, setupObject):
-        typeTextList = []
-        typeDict = {}
-        for featID in setupObject.targetDict:
-            featType = setupObject.targetDict[featID][1]
-            try:
-                featCount = typeDict[featType]
-                featCount += 1
-            except KeyError:
-                featCount = 1
-            typeDict[featType] = featCount
-
-        typeList = typeDict.keys()
-        typeList.sort()
-        for aType in typeList:
-            typeText = "Type " + str(aType) + " (" + str(typeDict[aType]) + " features)"
-            typeTextList.append(typeText)
-
-        return typeTextList
 
     def createRichnessResults(self, setupObject):
         selectedTypeTextList = [item.text() for item in self.typeListWidget.selectedItems()]
-        selectedTypeList = [int(item.split(" ")[1]) for item in selectedTypeTextList]
+        selectedTypeSet = set([int(item.split(" ")[1]) for item in selectedTypeTextList])
+        selectedFeatIDSet = cluz_functions2.makeFeatIDSetFromFeatTypeSet(setupObject, selectedTypeSet)
         puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
         fieldNameList = [field.name() for field in puLayer.pendingFields()]
         progressString = "details_fine"
 
-        if len(selectedTypeList) == 0:
+        if len(selectedFeatIDSet) == 0:
             qgis.utils.iface.messageBar().pushMessage("Calculating richness", "No type codes have been selected.", QgsMessageBar.WARNING, 3)
             progressString = "stop"
-        if self.countBox.isChecked() is False and self.rangeBox.isChecked() is False and self.irrepBox.isChecked() is False:
+        if self.countBox.isChecked() is False and self.rangeBox.isChecked() is False:
             qgis.utils.iface.messageBar().pushMessage("Calculating richness", "No options have been selected.", QgsMessageBar.WARNING, 3)
             progressString = "stop"
 
@@ -261,7 +212,7 @@ class richnessDialog(QDialog, Ui_richnessDialog):
             elif len(countFieldName) > 10:
                 qgis.utils.iface.messageBar().pushMessage("Invalid field name", "The Feature Count field name cannot be more than 10 characters long.", QgsMessageBar.WARNING)
             else:
-                cluz_functions2.produceCountField(setupObject, countFieldName, selectedTypeList)
+                cluz_functions2.produceCountField(setupObject, countFieldName, selectedFeatIDSet)
                 cluz_setup.removeThenAddPULayer(setupObject)
                 cluz_display.displayGraduatedLayer(setupObject, countFieldName, "Feature count", 2) #2 is yellow to green QGIS legend code
 
@@ -277,27 +228,74 @@ class richnessDialog(QDialog, Ui_richnessDialog):
             elif len(rangeFieldName) > 10:
                 qgis.utils.iface.messageBar().pushMessage("Invalid field name", "The Restricted Range Richness field name cannot be more than 10 characters long.", QgsMessageBar.WARNING)
             else:
-                cluz_functions2.produceRestrictedRangeField(setupObject, rangeFieldName, selectedTypeList)
+                cluz_functions2.produceRestrictedRangeField(setupObject, rangeFieldName, selectedFeatIDSet)
                 cluz_display.displayGraduatedLayer(setupObject, rangeFieldName, "Restricted Range score", 2) #2 is yellow to green QGIS legend code
 
                 qgis.utils.iface.messageBar().pushMessage("Richness results", "The fields have been successfully added to the planning unit layer attribute table.", QgsMessageBar.INFO, 3)
                 self.close()
 
-        if self.irrepBox.isChecked() and progressString == "details_fine":
-            irrepFieldName = self.irrepLineEdit.text()
-            if irrepFieldName in fieldNameList:
-                qgis.utils.iface.messageBar().pushMessage("Irreplaceability field name duplication", "The planning unit layer already contains a field named " + irrepFieldName + ". Please choose another name.", QgsMessageBar.WARNING)
-            elif irrepFieldName == "":
-                qgis.utils.iface.messageBar().pushMessage("Irreplaceability field name blank", "The Restricted Range Richness name field is blank. Please choose a name.", QgsMessageBar.WARNING)
-            elif len(irrepFieldName) > 10:
-                qgis.utils.iface.messageBar().pushMessage("Invalid field name", "The Irreplaceability field name cannot be more than 10 characters long.", QgsMessageBar.WARNING)
-            else:
-                combSize, puSize = cluz_functions2.calcIrrepCombinationSize(setupObject, selectedTypeList)
-                cluz_functions2.produceIrrepField(setupObject, irrepFieldName, selectedTypeList, combSize, puSize)
-                cluz_display.displayGraduatedLayer(setupObject, irrepFieldName, "Irreplaceability score", 2) #2 is yellow to green QGIS legend code
 
-                qgis.utils.iface.messageBar().pushMessage("Irreplaceability results", "The fields have been successfully added to the planning unit layer attribute table.", QgsMessageBar.INFO, 3)
-                self.close()
+class irrepDialog(QDialog, Ui_irrepDialog):
+    def __init__(self, iface, setupObject):
+        QDialog.__init__(self)
+        self.iface = iface
+        self.setupUi(self)
+
+        finalIrrepFieldName = cluz_functions2.returnInitialFieldName(setupObject, "SUM_IRR")
+        self.irrepLineEdit.setText(finalIrrepFieldName)
+        self.browseButton.setVisible(False)
+        self.outputLineEdit.setVisible(False)
+
+        typeList = cluz_functions2.produceTypeTextList(setupObject)
+        self.typeListWidget.addItems(typeList)
+        QObject.connect(self.browseButton, SIGNAL("clicked()"), self.setIrrepScoreTextFilePath)
+        QObject.connect(self.okButton, SIGNAL("clicked()"), lambda: self.produceIrrepResults(setupObject))
+
+        self.close()
+
+    def setIrrepScoreTextFilePath(self):
+        irrepScoreTextFilePathNameText = QFileDialog.getSaveFileName(self, 'Save Irreplaceability value results file', '*.csv')
+        if irrepScoreTextFilePathNameText != "":
+            self.outputLineEdit.setText(irrepScoreTextFilePathNameText)
+
+    def produceIrrepResults(self, setupObject):
+        selectedTypeTextList = [item.text() for item in self.typeListWidget.selectedItems()]
+        selectedTypeSet = set([int(item.split(" ")[1]) for item in selectedTypeTextList])
+        selectedFeatIDSet = cluz_functions2.makeFeatIDSetFromFeatTypeSet(setupObject, selectedTypeSet)
+        puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+        fieldNameList = [field.name() for field in puLayer.pendingFields()]
+        carryOnBool = cluz_functions2.checkIfTypeCodesAreValid(selectedFeatIDSet)
+        if carryOnBool:
+            carryOnBool = cluz_functions2.checkIfIrrepFieldNameIsValid(fieldNameList, self.irrepLineEdit.text())
+
+        if carryOnBool:
+            if self.allRadioButton.isChecked():
+                targetShortfallDict = setupObject.targetDict #Assumes nothing is protected and so shortfalls = targets
+                statusSet = {"Available", "Conserved", "Earmarked", "Excluded"}
+            else:
+                targetShortfallDict = cluz_functions2.createTargetShortfallDict(setupObject, selectedFeatIDSet) # Assumes Cons & Earmarked PUs are helping meet targets
+                statusSet = {"Available"}
+            puIDSet = cluz_functions2.returnSpecifiedStatusPUIDSet(setupObject, statusSet)
+
+        if carryOnBool:
+            irrepFieldName = self.irrepLineEdit.text()
+            portfolioSize = cluz_functions2.calcPortfolioSizeUsingRRRichness(setupObject)
+            if portfolioSize > 0:
+                irrepValuesDict, sumIrrepValuesDict = cluz_functions2.calcIrrepResultDicts(setupObject, portfolioSize, puIDSet, selectedFeatIDSet, targetShortfallDict)
+
+                cluz_functions2.produceSumIrrepField(setupObject, irrepFieldName, sumIrrepValuesDict)
+                cluz_setup.removeThenAddPULayer(setupObject)
+                cluz_display.displayGraduatedLayer(setupObject, irrepFieldName, "Summed irreplaceability", 2) #2 is yellow to green QGIS legend code
+
+                if self.outputCheckBox.isChecked():
+                    irrepValueMatrixTextFile = self.outputLineEdit.text()
+                    cluz_functions2.makeIrrepValueMatrixTextFile(selectedFeatIDSet, irrepValuesDict, irrepValueMatrixTextFile)
+                    cluz_messages.infoMessage("Irreplaceability results", "The irreplaceability text results file has been successfully created.")
+
+                cluz_messages.infoMessage("Irreplaceability results", "The irreplaceability field has been successfully added to the planning unit layer attribute table.")
+
+        self.close()
+
 
 class inputsDialog(QDialog, Ui_inputsDialog):
     def __init__(self, iface, setupObject):

@@ -77,7 +77,7 @@ class Ui_convertCsvDialog(object):
         self.convLineEdit.setObjectName(_fromUtf8("convLineEdit"))
         self.horizontalLayout_2.addWidget(self.convLineEdit)
         self.horizontalLayoutWidget_3 = QtGui.QWidget(convertCsvDialog)
-        self.horizontalLayoutWidget_3.setGeometry(QtCore.QRect(140, 100, 351, 41))
+        self.horizontalLayoutWidget_3.setGeometry(QtCore.QRect(140, 100, 561, 41))
         self.horizontalLayoutWidget_3.setObjectName(_fromUtf8("horizontalLayoutWidget_3"))
         self.horizontalLayout_3 = QtGui.QHBoxLayout(self.horizontalLayoutWidget_3)
         self.horizontalLayout_3.setObjectName(_fromUtf8("horizontalLayout_3"))
@@ -100,14 +100,6 @@ class Ui_convertCsvDialog(object):
         self.browseButton.setMinimumSize(QtCore.QSize(0, 22))
         self.browseButton.setObjectName(_fromUtf8("browseButton"))
         self.horizontalLayout_4.addWidget(self.browseButton)
-        self.logoLabel.raise_()
-        self.csvLabel.raise_()
-        self.horizontalLayoutWidget.raise_()
-        self.verticalLayoutWidget.raise_()
-        self.horizontalLayoutWidget_2.raise_()
-        self.noneRadioButton.raise_()
-        self.horizontalLayoutWidget_3.raise_()
-        self.horizontalLayoutWidget_4.raise_()
 
         self.retranslateUi(convertCsvDialog)
         QtCore.QObject.connect(self.cancelButton, QtCore.SIGNAL(_fromUtf8("clicked()")), convertCsvDialog.close)
@@ -123,7 +115,7 @@ class Ui_convertCsvDialog(object):
         self.noneRadioButton.setText(_translate("convertCsvDialog", "No conversion (results will be in layer measurement units)", None))
         self.userRadioButton.setText(_translate("convertCsvDialog", "User defined conversion", None))
         self.convLabel.setText(_translate("convertCsvDialog", "Area conversion value", None))
-        self.idfieldLabel.setText(_translate("convertCsvDialog", "Layer ID field name", None))
+        self.idfieldLabel.setText(_translate("convertCsvDialog", "Layer planning unit ID field name", None))
         self.browseButton.setText(_translate("convertCsvDialog", "Browse", None))
 
 import resources_rc

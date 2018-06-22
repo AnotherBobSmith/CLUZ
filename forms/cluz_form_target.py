@@ -2,8 +2,7 @@
 
 # Form implementation generated from reading ui file 'cluz_form_target.ui'
 #
-# Created: Sat Mar 28 15:57:45 2015
-#      by: PyQt4 UI code generator 4.10.3
+# Created by: PyQt4 UI code generator 4.11.4
 #
 # WARNING! All changes made in this file will be lost!
 
@@ -27,7 +26,7 @@ class Ui_targetDialog(object):
     def setupUi(self, targetDialog):
         targetDialog.setObjectName(_fromUtf8("targetDialog"))
         targetDialog.setWindowModality(QtCore.Qt.ApplicationModal)
-        targetDialog.resize(753, 478)
+        targetDialog.setMinimumSize(QtCore.QSize(750, 500))
         self.gridLayout = QtGui.QGridLayout(targetDialog)
         self.gridLayout.setObjectName(_fromUtf8("gridLayout"))
         self.targetTableWidget = QtGui.QTableWidget(targetDialog)

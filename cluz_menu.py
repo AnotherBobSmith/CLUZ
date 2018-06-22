@@ -46,6 +46,7 @@ from cluz_dialog1 import removeDialog
 from cluz_dialog2 import distributionDialog
 from cluz_dialog2 import identifySelectedDialog
 from cluz_dialog2 import richnessDialog
+from cluz_dialog2 import irrepDialog
 from cluz_dialog2 import portfolioDialog
 from cluz_dialog2 import inputsDialog
 from cluz_dialog2 import marxanDialog
@@ -103,6 +104,7 @@ class Cluz:
         self.DistributionAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_dist.png"), "Display distributions of conservation features", self.iface.mainWindow())
         self.IdentifySelectedAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_selident.png"), "Identify features in selected units", self.iface.mainWindow())
         self.RichnessAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_richness.png"), "Calculate richness scores", self.iface.mainWindow())
+        self.IrrepAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_irrep.png"), "Calculate irreplaceability values", self.iface.mainWindow())
         self.PortfolioAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_portfolio.png"), "Calculate portfolio characteristics", self.iface.mainWindow())
 
         self.InputsAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_menu_marxcreate.png"), "Create Marxan input files", self.iface.mainWindow())
@@ -117,6 +119,7 @@ class Cluz:
         self.AbundAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_abund.png"), "Open abundance table", self.iface.mainWindow())
         self.TargetsMetAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_target_met.png"), "Open Marxan results table", self.iface.mainWindow())
         self.BestToEarmarkedAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_best_ear.png"), "Change the status of the Best units to Earmarked", self.iface.mainWindow())
+        self.EarmarkedToAvailableAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_ear_avail.png"), "Change the status of the Earmarked units to Available", self.iface.mainWindow())
         self.TargetsMetAction.setEnabled(False)
         self.ChangeAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_change.png"), "Change planning unit status", self.iface.mainWindow())
         self.IdentifyAction = QAction(QIcon(os.path.dirname(__file__) + "/icons/cluz_identify.png"), "Identify features in planning unit", self.iface.mainWindow())
@@ -134,6 +137,7 @@ class Cluz:
         self.DistributionAction.triggered.connect(lambda: self.runShowDistributionFeatures(setupObject))
         self.IdentifySelectedAction.triggered.connect(lambda: self.runIdentifyFeaturesInSelected(setupObject))
         self.RichnessAction.triggered.connect(lambda: self.calcRichness(setupObject))
+        self.IrrepAction.triggered.connect(lambda: self.calcIrrepValues(setupObject))
         self.PortfolioAction.triggered.connect(lambda: self.calcPortfolioDetails(setupObject))
 
         self.InputsAction.triggered.connect(lambda: self.runCreateMarxanInputFiles(setupObject))
@@ -146,8 +150,9 @@ class Cluz:
 
         self.TargetAction.triggered.connect(lambda: self.runTargetDialog(setupObject))
         self.AbundAction.triggered.connect(lambda: self.runAbundSelectDialog(setupObject))
-        self.TargetsMetAction.triggered.connect(lambda: self.targetsMetDialog(setupObject))
         self.BestToEarmarkedAction.triggered.connect(lambda: self.changeBestToEarmarked(setupObject))
+        self.TargetsMetAction.triggered.connect(lambda: self.targetsMetDialog(setupObject))
+        self.EarmarkedToAvailableAction.triggered.connect(lambda: self.changeEarmarkedToAvailable(setupObject))
         self.ChangeAction.triggered.connect(lambda: self.runChangeStatusDialog(setupObject))
         self.IdentifyAction.triggered.connect(lambda: self.showFeaturesInPU(setupObject))
 
@@ -164,6 +169,7 @@ class Cluz:
         self.cluz_menu.addAction(self.DistributionAction)
         self.cluz_menu.addAction(self.IdentifySelectedAction)
         self.cluz_menu.addAction(self.RichnessAction)
+        # self.cluz_menu.addAction(self.IrrepAction)
         self.cluz_menu.addAction(self.PortfolioAction)
         self.cluz_menu.addSeparator()
         self.cluz_menu.addAction(self.InputsAction)
@@ -177,6 +183,7 @@ class Cluz:
         # Add actions as buttons on menu bar
         self.cluz_toolbar.addAction(self.TargetAction)
         self.cluz_toolbar.addAction(self.AbundAction)
+        self.cluz_toolbar.addAction(self.EarmarkedToAvailableAction)
         self.cluz_toolbar.addAction(self.TargetsMetAction)
         self.cluz_toolbar.addAction(self.BestToEarmarkedAction)
         self.cluz_toolbar.addSeparator()
@@ -286,7 +293,6 @@ class Cluz:
             if setupObject.abundPUKeyDict == "blank":
                 setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
             cluz_functions1.troubleShootCLUZFiles(setupObject)
-            cluz_randomshit.jessMaps()
 
     def runShowDistributionFeatures(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
@@ -334,6 +340,21 @@ class Cluz:
             self.richnessDialog.show()
             # Run the dialog event loop
             result = self.richnessDialog.exec_()
+
+    def calcIrrepValues(self, setupObject):
+        checkSetupFileLoaded(self, setupObject)
+        openSetupDialogIfSetupFilesIncorrect(self, setupObject)
+        checkCreateAddFiles(setupObject)
+
+        if setupObject.setupStatus == "files_checked":
+            if setupObject.abundPUKeyDict == "blank":
+                setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
+
+            self.irrepDialog = irrepDialog(self, setupObject)
+            # show the dialog
+            self.irrepDialog.show()
+            # Run the dialog event loop
+            result = self.irrepDialog.exec_()
 
     def calcPortfolioDetails(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
@@ -511,6 +532,19 @@ class Cluz:
 
             cluz_functions3.changeBestToEarmarkedPUs(setupObject)
 
+
+    def changeEarmarkedToAvailable(self, setupObject):
+        checkSetupFileLoaded(self, setupObject)
+        openSetupDialogIfSetupFilesIncorrect(self, setupObject)
+        checkCreateAddFiles(setupObject)
+
+        if setupObject.setupStatus == "files_checked":
+            if setupObject.abundPUKeyDict == "blank":
+                setupObject.abundPUKeyDict = cluz_setup.makeAbundancePUKeyDict(setupObject)
+
+            cluz_functions3.changeEarmarkedToAvailablePUs(setupObject)
+
+
     def runChangeStatusDialog(self, setupObject):
         checkSetupFileLoaded(self, setupObject)
         openSetupDialogIfSetupFilesIncorrect(self, setupObject)
@@ -541,7 +575,7 @@ class Cluz:
 # Checks whether setup file has been loaded
 def checkSetupFileLoaded(self, setupObject):
     if setupObject.overRide:
-        cluz_setup.updateSetupObjectFromSetupFile(setupObject, "C:\\Program Files\\QGIS Lyon\\bin\\ex1.clz")
+        cluz_setup.updateSetupObjectFromSetupFile(setupObject, "C:\\Users\\Bob\\.qgis2\\python\\plugins\\cluz\\ex1.clz")
     else:
         if setupObject.setupPath == "blank":
             self.startDialog = startDialog(self, setupObject)
@@ -576,4 +610,5 @@ def openSetupDialogIfSetupFilesIncorrect(self, setupObject):
 
 def checkCreateAddFiles(setupObject):
     cluz_setup.createAndCheckCLUZFiles(setupObject)
+    cluz_setup.makeTargetDict(setupObject)
     cluz_setup.checkAddPULayer(setupObject)

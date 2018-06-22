@@ -23,7 +23,6 @@ import qgis
 from qgis.core import *
 from qgis.gui import *
 
-import cluz_setup
 
 def puStatusDoesNotEqualExcluded(unitDictionary, puID):
     notExcludedBool = True

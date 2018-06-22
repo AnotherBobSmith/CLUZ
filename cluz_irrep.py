@@ -1,3 +1,5 @@
+from __future__ import division
+
 # -*- coding: utf-8 -*-
 """
 /***************************************************************************
@@ -21,155 +23,8 @@
 
 import math
 
-def makeIrrepInitVarDict(combsize, sites):
-    irrepInitVarDict = {}
 
-    mult = sites /(sites - 1)
-    wt_include = float(combsize) / float(sites)
-    wt_exclude = 1 - wt_include
-
-    initVarDict["combsize"] = combsize
-    initVarDict["mult"] = mult
-    initVarDict["wt_include"] = wt_include
-    initVarDict["wt_exclude"] = wt_exclude
-
-    return irrepInitVarDict
-
-def makeIrrepTot_Tot2FeatDict(setupObject, selectedTypeList):
-    totFeatDict = {}
-    totSqrFeatDict = {}
-
-    typeSet = set(selectedTypeList)
-    for puID in setupObject.abundPUKeyDict:
-        puFeatDict = setupObject.abundPUKeyDict[puID]
-        puFeatList = puFeatDict.keys()
-        for featID in puFeatList:
-            featType = setupObject.targetDict[featID][1]
-            if featType in typeSet:
-                featAmount = puFeatDict[featID]
-                featSqrAmount = featAmount ** 2
-                try:
-                    runningTotAmount = totFeatDict[featID]
-                except KeyError:
-                    runningTotAmount = 0
-                runningTotAmount += featAmount
-                totFeatDict[featID] = runningTotAmount
-                try:
-                    runningTotSqrAmount = totSqrFeatDict[featID]
-                except KeyError:
-                    runningTotSqrAmount = 0
-                runningTotSqrAmount += featSqrAmount
-                totSqrFeatDict[featID] = runningTotSqrAmount
-
-    return totFeatDict, totSqrFeatDict
-
-
-def calcMeanAmountSD(featAmount, totFeatAmount, featAmountSqr, totFeatAmountSqr, mult):
-    outsideAmount = (totFeatAmount - featAmount) * mult      #:=(sum[feature]-area_site)*mult;
-    outsideSquaredAmount = (totFeatAmountSqr - featAmountSqr) * mult   #:=(sum2[feature]-area2_site)*mult;
-    meanAmount = outsideAmount / sites             #:=sumarea/sites;
-
-    sitesMinusOne = sites - 1
-    combSizeMinusOne = combsize - 1
-    if combSizeMinusOne > sitesMinusOne / 2.0:  #if (combsize-1) > (sites-1)/2.0 then
-        combadj = math.sqrt(sitesMinusOne - combSizeMinusOne / combSizeMinusOne)            #combadj:=sqrt((sites-1)-(combsize-1))/(combsize-1)
-    else:
-        combadj = math.sqrt(combSizeMinusOne / combSizeMinusOne)        #combadj:=sqrt(combsize-1)/(combsize-1);
-
-    sd = (math.sqrt((outsideSquaredAmount - (outsideAmount **2)/sites)/sites)) * combadj   #sd:=(sqrt((sumarea2-sqr(sumarea)/sites)/(sites)))*combadj;
-
-    return meanAmount, sd
-
-def calcUnitIrreplScore(setupObject, puID, irrepInitVarDict, totFeatDict, totSqrFeatDict):
-    puAbundDict = setupObject.abundPUKeyDict[puID]
-    combsize = float(irrepInitVarDict["combsize"])
-    mult = irrepInitVarDict["mult"]
-    wt_include = irrepInitVarDict["wt_include"]
-    wt_exclude = irrepInitVarDict["wt_exclude"]
-
-    print "wt_include =", wt_include
-    print "wt_exclude =", wt_exclude
-    print ""
-
-    selectedFeatureList = totFeatDict.keys()
-    selectedFeatureSet = set(selectedFeatureList)
-    unitIrreplScore = 0
-
-    for featID in puAbundDict:
-        if featID in selectedFeatureSet:
-            featAmount = float(puAbundDict[featID])
-            featAmountSqr = featAmount ** 2
-            totFeatAmount = float(totFeatDict[featID])
-            totFeatAmountSqr = float(totSqrFeatDict[featID])
-            featTarget = float(setupObject.targetDict[featID][3])
-
-            meanAmount, sd = calcMeanAmountSD(featAmount, totFeatAmount, featAmountSqr, totFeatAmountSqr, mult)
-
-            ### Calc repr_removed = Representative combinations when the site is removed
-            if totFeatAmount - featAmount < featTarget: #if (sum[feature]-area_site) < target[feature] then
-                repr_removed = 0.0             #repr_incexc[feature]:=0;
-            else:
-                mean_target = featTarget / (combsize - 1)   #mean_target:=target[feature]/(combsize-1);
-                print "arse", featTarget, combsize, mean_target
-                if sd < 0.00000000001:
-                    if meanAmount < mean_target:
-                        repr_removed = 0  #repr_incexc[feature]:=0
-                    else:
-                        repr_removed = 1   #repr_incexc[feature]:=1;
-                else:
-                    z = mean_target - meanAmount / sd   #z:=(mean_target-mean_site)/sd;
-                    print "yyy", mean_target, meanAmount, sd, z
-                    repr_removed = calcZprob(z)      #repr_incexc[feature]:=zprob(z);
-            print "repr_removed =", repr_removed
-
-            ### Calc repr_include  = Representative combinations when the site is included
-            if featAmount >= featTarget:        #if area_site >= target[feature] then
-                repr_include = 1       #repr_include[feature]:=1;
-            else:
-                mean_target = (featTarget - featAmount)/(combsize - 1);    #mean_target:=(target[feature]-area_site)/(combsize-1);
-                if sd < 0.00000000001:
-                    if meanAmount < mean_target:       #if mean_site < mean_target then
-                        repr_include = 0       #repr_include[feature]:=0
-                    else:
-                       repr_include = 1   #repr_include[feature]:=1;
-                else:
-                    z = (mean_target - meanAmount)/sd    #z:=(mean_target-mean_site)/sd;
-                    repr_include = calcZprob(z)   #repr_include[feature]:=zprob(z);
-
-            print "repr_include =", repr_include
-
-            ### Calc repr_exclude = Representative combinations when the site is excluded
-            if totFeatAmount - featAmount < featTarget:          #if (sum[feature]-area_site) < target[feature] then
-                repr_exclude = 0       #repr_exclude[feature]:=0;
-            else:
-                mean_target = featTarget / combsize       #mean_target:=target[feature]/(combsize);
-                if sd < 0.00000000001:
-                    if meanAmount < mean_target:
-                        repr_exclude = 0       #repr_exclude[feature]:=0
-                    else:
-                       repr_exclude = 1         #repr_exclude[feature]:=1;
-                else:
-                    z = (mean_target - meanAmount) / sd   #z:=(mean_target-mean_site)/sd;
-                    repr_exclude = calcZprob(z)    #repr_exclude[feature]:=zprob(z);
-            print "repr_exclude =", repr_exclude
-
-            ### Calc irr_feature
-            if repr_include == 0 and featAmount > 0:    #if (repr_include[feature] = 0) and (area[site,feature] > 0) then
-                finalRepr_include = 1                       #repr_include[feature]:=1;
-            else:
-                finalRepr_include = repr_include
-            if repr_include == 0 and repr_exclude == 0:      #(repr_include[feature] + repr_exclude[feature]) = 0 then
-                irr_feature = 0                 #irr_feature[feature]:=0
-            else:
-                irr_equationComp1 = (finalRepr_include - repr_removed) * wt_include
-                irr_equationComp12 = (finalRepr_include * wt_include) + (repr_exclude * wt_exclude)
-                irr_feature = irr_equationComp1 / irr_equationComp12    #irr_feature[feature]:=((repr_include[feature]-repr_incexc[feature])*wt_include) /(repr_include[feature]*wt_include+repr_exclude[feature]*wt_exclude);
-
-            print "irr_feature = ", irr_feature
-            unitIrreplScore += irr_feature
-
-    return unitIrreplScore
-
+# {----------------------------------------------------------------------------}
 def calcZprob(x):
     if x < 0:
         negative = True
@@ -178,8 +33,7 @@ def calcZprob(x):
         negative = False
     if x > 50:
         x = 50
-    sqrX = x * x
-    z = 0.3989 * math.exp((0 - sqrX) / 2)
+    z = 0.3989 * math.exp((0 - math.sqrt(x)) / 2)
     t = 1 / (1 + 0.23164 * x)
     m = t
     q = 0.31938 * m
@@ -192,23 +46,128 @@ def calcZprob(x):
     m = m * t
     q = q + 1.33027 * m
     if negative:
-        finalValue = 1 - q * z
+        zprob = 1 - q * z
     else:
-        finalValue = q * z
+        zprob = q * z
 
-    return finalValue
+    return zprob
 
-dataDict = importIrrepData("C:\Users\Bob\Dropbox\Various\Q-CLUZ\Irreplaceability code\irr_data.txt")
-combsize = 3
-sites = len(dataDict.keys())
-initVarDict = makeInitVarDict(combsize, sites)
-totFeatDict = makeTotFeatDict(dataDict)
-totSqrFeatDict = makeTotSqrFeatDict(dataDict)
-target_proportion = 0.1
-targetDict = makeTargetDict(totFeatDict, target_proportion)
 
-unitID = 1
-unitIrreplScore = calcUnitIrreplScore(unitID, initVarDict, dataDict, targetDict, totFeatDict, totSqrFeatDict)
 
-print ""
-print "Irrep = ", unitIrreplScore
+def calcFeatUnitIrreplValue(setupObject, initVarDict, puID, featID, sumFeatAmountDict, sumSqrFeatAmount2Dict, targetShortfallDict):
+    totNumSites = initVarDict["totNumSites"]
+    mult = initVarDict["mult"]
+
+    featTarget = targetShortfallDict[featID][3]
+    featAmount = setupObject.abundPUKeyDict[puID][featID]
+    featAmountSqr = featAmount ** 2
+    featSumAmount = (sumFeatAmountDict[featID] - featAmount) * mult
+    featSumAmountSqr = (sumSqrFeatAmount2Dict[featID] - featAmountSqr) * mult
+    meanFeatAmountPerPU = featSumAmount / totNumSites
+    sd = calcStandardDev(featSumAmount, featSumAmountSqr, totNumSites)
+
+    rxRemoved = calcRxRemoved(initVarDict, sd, featAmount, featTarget, meanFeatAmountPerPU, featSumAmount)
+    rxIncluded = calcRxIncluded(initVarDict, sd, featAmount, featTarget, meanFeatAmountPerPU)
+    rxExcluded = calcRxExcluded(initVarDict, sd, featAmount, featTarget, featSumAmount, meanFeatAmountPerPU)
+
+    if (rxIncluded + rxExcluded) == 0:
+        irrepValue = 0
+    else:
+        irrepValue = calcIrrFeature(initVarDict, rxRemoved, rxIncluded, rxExcluded, featAmount)
+
+    return irrepValue
+
+
+def calcStandardDev(featSumAmount, featSumAmountSqr, totNumSites):
+    step1 = featSumAmountSqr - ((featSumAmount ** 2) / totNumSites) / totNumSites
+    sd = math.sqrt(step1)
+
+    return sd
+
+
+def calcAdjustedPortfolioSize(totNumSites, portfolioSize):
+    if portfolioSize > totNumSites / 2.0:
+        adjustedPortfolioSize = math.sqrt(totNumSites - portfolioSize) / portfolioSize
+    else:
+        adjustedPortfolioSize = math.sqrt(portfolioSize) / portfolioSize
+
+    return adjustedPortfolioSize
+
+
+def calcRxRemoved(initVarDict, sd, featAmount, featTarget, meanFeatAmountPerPU, featSumAmount):
+    totNumSites = initVarDict["totNumSites"]
+    portfolioSize = initVarDict["portfolioSize"]
+    meanTargetPerPortfolioSize = featTarget / (portfolioSize - 1)
+    adjustedPortfolioSize = calcAdjustedPortfolioSize(totNumSites - 1, portfolioSize - 1)
+    adjSD = sd * adjustedPortfolioSize
+    z = "aaa"
+    if (featSumAmount - featAmount) < featTarget:
+        rxRemoved = 0
+    else:
+        if adjSD < 0.00000000001:
+            if meanFeatAmountPerPU < meanTargetPerPortfolioSize:
+                rxRemoved = 0
+            else:
+                 rxRemoved = 1
+        else:
+            z = (meanTargetPerPortfolioSize - meanFeatAmountPerPU) / adjSD
+            rxRemoved = calcZprob(z)
+
+    return rxRemoved
+
+
+def calcRxIncluded(initVarDict, sd, featAmount, featTarget, meanFeatAmountPerPU):
+    totNumSites = initVarDict["totNumSites"]
+    portfolioSize = initVarDict["portfolioSize"]
+    meanTargetPerPortfolioSize = (featTarget - featAmount) / (portfolioSize - 1)
+    adjustedPortfolioSize = calcAdjustedPortfolioSize(totNumSites - 1, portfolioSize - 1)
+    adjSD = sd * adjustedPortfolioSize
+    z = "aaa"
+    if featAmount >= featTarget:
+        rxIncluded = 1
+    else:
+        if adjSD < 0.00000000001:
+            if meanFeatAmountPerPU < meanTargetPerPortfolioSize:
+                rxIncluded = 0
+            else:
+                rxIncluded = 1
+        else:
+             z = (meanTargetPerPortfolioSize - meanFeatAmountPerPU) / adjSD
+             rxIncluded = calcZprob(z)
+
+    return rxIncluded
+
+
+def calcRxExcluded(initVarDict, sd, featAmount, featTarget, featSumAmount, meanFeatAmountPerPU):
+    totNumSites = initVarDict["totNumSites"]
+    portfolioSize = initVarDict["portfolioSize"]
+    meanTargetPerPortfolioSize = featTarget / portfolioSize
+    adjustedPortfolioSize = calcAdjustedPortfolioSize(totNumSites - 1, portfolioSize)
+    adjSD = sd * adjustedPortfolioSize
+    if (featSumAmount - featAmount) < featTarget:
+        rxExcluded = 0
+    else:
+        if adjSD < 0.00000000001:
+            if meanFeatAmountPerPU < meanTargetPerPortfolioSize:
+                rxExcluded = 0
+            else:
+                rxExcluded = 1
+        else:
+            z = (meanTargetPerPortfolioSize - meanFeatAmountPerPU) / adjSD
+            rxExcluded = calcZprob(z)
+
+    return rxExcluded
+
+
+def calcIrrFeature(initVarDict, rxRemoved, rxIncluded, rxExcluded, featAmount):
+    wt_include = initVarDict["wt_include"]
+    wt_exclude = initVarDict["wt_exclude"]
+
+    if rxIncluded == 0 and featAmount > 0:
+        rxIncluded = 1
+    if rxIncluded + rxExcluded == 0:
+        irr_feature = 0
+    else:
+        irr_feature = ((rxIncluded - rxRemoved) * wt_include) / (rxIncluded * wt_include + rxExcluded * wt_exclude)
+
+    return irr_feature

@@ -30,7 +30,6 @@ import csv
 
 import cluz_mpfunctions
 import cluz_mpoutputs
-import cluz_setup
 
 
 def makeMinpatchDataDict(setupObject, minpatchObject):

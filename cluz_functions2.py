@@ -30,12 +30,14 @@ import time
 import math
 import shutil
 import stats
+import copy
 
 import cluz_equations
 import cluz_mpfunctions
 import cluz_mpsetup
 import cluz_mpoutputs
 import cluz_setup
+import cluz_irrep
 import cluz_messages
 
 
@@ -45,7 +47,6 @@ def createSpecDatFile(setupObject):
     specDatWriter = csv.writer(open(specDatName, "wb"))
     specDatWriter.writerow(["id", "name", "target", "spf", "type"])
 
-    featNameWarning = False
     targetDict = setupObject.targetDict
     featList = targetDict.keys()
     featList.sort()
@@ -607,7 +608,7 @@ def addBestMarxanOutputToPUShapefile(setupObject, bestOutputFilePath, bestFieldN
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     provider = puLayer.dataProvider()
     idFieldOrder = provider.fieldNameIndex("Unit_ID")
-    statusFieldOrder = provider.fieldNameIndex("Status")
+    statusFieldIndex = provider.fieldNameIndex("Status")
 
     bestFieldOrder = provider.fieldNameIndex(bestFieldName)
     if bestFieldOrder == -1:
@@ -621,7 +622,7 @@ def addBestMarxanOutputToPUShapefile(setupObject, bestOutputFilePath, bestFieldN
         puRow = puFeature.id()
         puAttributes = puFeature.attributes()
         puID = puAttributes[idFieldOrder]
-        puStatus = puAttributes[statusFieldOrder]
+        puStatus = puAttributes[statusFieldIndex]
         bestBool = bestDict[puID]
         if puStatus == "Conserved":
             bestStatus = "Conserved"
@@ -688,7 +689,53 @@ def makeSummedScoresDict(summedOutputFile):
 
     return summedScoreDict
 
-def produceCountField(setupObject, countFieldName, selectedTypeList):
+
+def makeFeatIDSetFromFeatTypeSet(setupObject, selectedTypeSet):
+    selectedFeatIDSet = set()
+    for featID in setupObject.targetDict:
+        featType = setupObject.targetDict[featID][1]
+        if featType in selectedTypeSet:
+            selectedFeatIDSet.add(featID)
+
+    return selectedFeatIDSet
+
+
+def produceTypeTextList(setupObject):
+    typeTextList = []
+    typeDict = {}
+    for featID in setupObject.targetDict:
+        featType = setupObject.targetDict[featID][1]
+        try:
+            featCount = typeDict[featType]
+            featCount += 1
+        except KeyError:
+            featCount = 1
+        typeDict[featType] = featCount
+
+    typeList = typeDict.keys()
+    typeList.sort()
+    for aType in typeList:
+        typeText = "Type " + str(aType) + " (" + str(typeDict[aType]) + " features)"
+        typeTextList.append(typeText)
+
+    return typeTextList
+
+
+def returnInitialFieldName(setupObject, fieldName):
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+    fieldNameList = [field.name() for field in puLayer.pendingFields()]
+
+    countSuffix = ""
+    if fieldName in fieldNameList:
+        countSuffix = 1
+        while (fieldName + str(countSuffix)) in fieldNameList:
+            countSuffix += 1
+    finalFieldName = fieldName + str(countSuffix)
+
+    return finalFieldName
+
+
+def produceCountField(setupObject, countFieldName, selectedFeatIDSet):
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     provider = puLayer.dataProvider()
     idFieldOrder = provider.fieldNameIndex("Unit_ID")
@@ -698,14 +745,12 @@ def produceCountField(setupObject, countFieldName, selectedTypeList):
     countFieldOrder = provider.fieldNameIndex(countFieldName)
 
     countDict = {}
-    typeSet = set(selectedTypeList)
     for puID in setupObject.abundPUKeyDict:
         featCount = 0
         puFeatDict = setupObject.abundPUKeyDict[puID]
         for featID in puFeatDict:
             featAmount = puFeatDict[featID]
-            featType = setupObject.targetDict[featID][1]
-            if featAmount > 0 and featType in typeSet:
+            if featAmount > 0 and featID in selectedFeatIDSet:
                 featCount += 1
         countDict[puID] = featCount
 
@@ -723,7 +768,7 @@ def produceCountField(setupObject, countFieldName, selectedTypeList):
 
     puLayer.commitChanges()
 
-def produceRestrictedRangeField(setupObject, rangeFieldName, selectedTypeList):
+def produceRestrictedRangeField(setupObject, rangeFieldName, selectedFeatIDSet):
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     provider = puLayer.dataProvider()
     idFieldOrder = provider.fieldNameIndex("Unit_ID")
@@ -735,7 +780,7 @@ def produceRestrictedRangeField(setupObject, rangeFieldName, selectedTypeList):
         puID = puAttributes[idFieldOrder]
         puIDSet.add(puID)
 
-    scoreDict, highScorePUID = cluz_equations.makeRestrictedRangeDict(setupObject, selectedTypeList, puIDSet)
+    scoreDict, highScorePUID = cluz_equations.makeRestrictedRangeDict(setupObject, selectedFeatIDSet, puIDSet)
 
     puLayer.startEditing()
     provider.addAttributes([QgsField(rangeFieldName, QVariant.Double)])
@@ -756,36 +801,203 @@ def produceRestrictedRangeField(setupObject, rangeFieldName, selectedTypeList):
 
     puLayer.commitChanges()
 
-def calcIrrepCombinationSize(setupObject, selectedTypeList):
+
+def checkIfTypeCodesAreValid(selectedFeatIDSet):
+    carryOnBool = True
+    if len(selectedFeatIDSet) == 0:
+        cluz_messages.warningMessage("Calculating irreplaceability", "No type codes have been selected")
+        carryOnBool = False
+
+    return carryOnBool
+
+
+def checkIfIrrepFieldNameIsValid(fieldNameList, irrepFieldName):
+    carryOnBool = True
+    if irrepFieldName in fieldNameList:
+        cluz_messages.warningMessage("Summed irreplaceability field name duplication", "The planning unit layer already contains a field named " + irrepFieldName + ". Please choose another name.")
+        carryOnBool = False
+    elif irrepFieldName == "":
+        cluz_messages.warningMessage("Summed irreplaceability field name duplication", "The Summed irreplaceability field name field is blank. Please choose a name.")
+        carryOnBool = False
+    elif len(irrepFieldName) > 10:
+        cluz_messages.warningMessage("Invalid field name", "The summed irreplaceability field name cannot be more than 10 characters long.")
+        carryOnBool = False
+
+    return carryOnBool
+
+
+def createTargetShortfallDict(setupObject, selectedFeatIDSet):
+    targetShortfallDict = dict()
+    for featID in selectedFeatIDSet:
+        featName = setupObject.targetDict[featID][0]
+        featType = setupObject.targetDict[featID][1]
+        featSpf = setupObject.targetDict[featID][2]
+
+        featTarget = setupObject.targetDict[featID][3]
+        featConAmount = setupObject.targetDict[featID][4]
+        featTargetShortfallAmount = featTarget - featConAmount
+        if featTargetShortfallAmount < 0:
+            featTargetShortfallAmount = 0
+
+        targetShortfallDict[featID] = [featName, featType, featSpf, featTargetShortfallAmount] # First three values are padding to produce column numbers as targetDict
+
+    return targetShortfallDict
+
+
+def calcPortfolioSizeUsingRRRichness(setupObject):
+    runningPUIDSet = returnSpecifiedStatusPUIDSet(setupObject, {"Available"})
+    unmetTargetFeatIDDict = createUnmetTargetFeatIDDict(setupObject)
+    unmetTargetFeatIDSet = set(unmetTargetFeatIDDict.keys())
+    selectedPUIDSet = returnSpecifiedStatusPUIDSet(setupObject, {"Conserved", "Earmarked"})
+    runningRichnessScore = "Dummy value to get things started"
+    while len(unmetTargetFeatIDDict) > 0 and runningRichnessScore > 0:
+        scoreDict, highScorePUID = cluz_equations.makeRestrictedRangeDict(setupObject, unmetTargetFeatIDSet, runningPUIDSet)
+        runningRichnessScore = scoreDict[highScorePUID]
+        runningPUIDSet.remove(highScorePUID)
+        selectedPUIDSet.add(highScorePUID)
+        unmetTargetFeatIDDict = updateUnmetTargetFeatIDDict(setupObject, unmetTargetFeatIDDict, highScorePUID)
+        unmetTargetFeatIDSet = set(unmetTargetFeatIDDict.keys())
+
+    if len(unmetTargetFeatIDDict) > 0 and runningRichnessScore == 0:
+        cluz_messages.irrepCalcPortfolioSizeWarning()
+        selectedPUIDSet = set()
+
+    return len(selectedPUIDSet)
+
+
+def createUnmetTargetFeatIDDict(setupObject):
+    unmetTargetFeatIDDict = dict()
+    for featID in setupObject.targetDict:
+        featTargetShortfall = setupObject.targetDict[featID][3] - setupObject.targetDict[featID][4]
+        if featTargetShortfall > 0:
+            unmetTargetFeatIDDict[featID] = featTargetShortfall
+
+    return unmetTargetFeatIDDict
+
+
+def returnSpecifiedStatusPUIDSet(setupObject, specifiedStatusSet):
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     provider = puLayer.dataProvider()
-    idFieldOrder = provider.fieldNameIndex("Unit_ID")
+    idFieldIndex = provider.fieldNameIndex("Unit_ID")
+    statusFieldIndex = provider.fieldNameIndex("Status")
 
-    puIDSet = set()
+    specifiedStatusPUIDSet = set()
     puFeatures = puLayer.getFeatures()
-    puLayer.startEditing()
     for puFeature in puFeatures:
         puAttributes = puFeature.attributes()
-        puID = puAttributes[idFieldOrder]
-        puIDSet.add(puID)
-    puSize = len(puIDSet)
+        puID = int(puAttributes[idFieldIndex])
+        puStatusText = str(puAttributes[statusFieldIndex])
+        if puStatusText in specifiedStatusSet:
+            specifiedStatusPUIDSet.add(puID)
 
-    targetShortfallDict = cluz_equations.makeTargetShortfallDict(setupObject, selectedTypeList)
+    return specifiedStatusPUIDSet
 
-    selectedPUSet = set()
-    loopBool = True
 
-    while loopBool == True:
-        scoreDict, highScorePUID = cluz_equations.makeRestrictedRangeDict(setupObject, selectedTypeList, puIDSet)
-        selectedPUSet.add(highScorePUID)
-        puIDSet.remove(highScorePUID)
-        targetShortfallDict = cluz_equations.updateTargetShortfallDict(setupObject, targetShortfallDict, highScorePUID)
-        loopBool = cluz_equations.checkTargetShortfallDict(targetShortfallDict)
+def updateUnmetTargetFeatIDDict(setupObject, unmetTargetFeatIDDict, highScorePUID):
+    puAbundDict = setupObject.abundPUKeyDict[highScorePUID]
+    for featID in puAbundDict:
+        try:
+            origShortfall = unmetTargetFeatIDDict[featID]
+            newShortfall = origShortfall - puAbundDict[featID]
+            if newShortfall <= 0:
+                unmetTargetFeatIDDict.pop(featID)
+            else:
+                unmetTargetFeatIDDict[featID] = newShortfall
+        except KeyError:
+            pass
 
-    combSize = len(selectedPUSet)
-    return combSize, puSize
+    return unmetTargetFeatIDDict
 
-def produceIrrepField(setupObject, irrepFieldName, selectedTypeList, combSize, puSize):
+
+def returnFeatAmountInPU(setupObject, featID, puID):
+    try:
+        featAmount = setupObject.abundPUKeyDict[puID][featID]
+    except KeyError:
+        featAmount = 0
+
+    return featAmount
+
+
+def calcIrrepResultDicts(setupObject, portfolioSize, puIDSet, selectedFeatIDSet, targetShortfallDict):
+    irrepInitVarDict = makeIrrepInitVarDict(portfolioSize, len(puIDSet))
+    sumFeatAmountDict, sumSqrFeatAmount2Dict = makeSumFeatureAmountDicts(setupObject)
+    irrepValuesDict, sumIrrepValuesDict = makeIrrepDicts(setupObject, irrepInitVarDict, puIDSet, sumFeatAmountDict, sumSqrFeatAmount2Dict, selectedFeatIDSet, targetShortfallDict)
+
+    return irrepValuesDict, sumIrrepValuesDict
+
+
+def makeIrrepInitVarDict(portfolioSize, totNumSites):
+    initVarDict = dict()
+    mult = calcMultiplier(totNumSites)
+    wt_include = float(portfolioSize) / float(totNumSites)
+    wt_exclude = 1 - wt_include
+    initVarDict["portfolioSize"] = portfolioSize
+    initVarDict["totNumSites"] = totNumSites
+    initVarDict["mult"] = mult
+    initVarDict["wt_include"] = wt_include
+    initVarDict["wt_exclude"] = wt_exclude
+
+    return initVarDict
+
+
+def calcMultiplier(totNumSites):
+    denom = totNumSites - 1
+    mult = totNumSites / denom
+
+    return mult
+
+
+def makeSumFeatureAmountDicts(setupObject):
+    puIDList = setupObject.abundPUKeyDict.keys()
+    sumFeatAmountDict = dict()
+    sumSqrFeatAmount2Dict = dict()
+
+    for puID in puIDList:
+        puFeatDict = setupObject.abundPUKeyDict[puID]
+        for featID in puFeatDict:
+            featAmount = puFeatDict[featID]
+            try:
+                sumFeatAmount = sumFeatAmountDict[featID]
+                sumSqrFeatAmount = sumSqrFeatAmount2Dict[featID]
+            except KeyError:
+                sumFeatAmount = 0
+                sumSqrFeatAmount = 0
+            sumFeatAmount += featAmount
+            sumSqrFeatAmount += featAmount ** 2
+            sumFeatAmountDict[featID] = sumFeatAmount
+            sumSqrFeatAmount2Dict[featID] = sumSqrFeatAmount
+
+    return sumFeatAmountDict, sumSqrFeatAmount2Dict
+
+
+def makeIrrepDicts(setupObject, irrepInitVarDict, puIDSet, sumFeatAmountDict, sumSqrFeatAmount2Dict, selectedFeatIDSet, targetShortfallDict):
+    irrepValuesDict = dict()
+    sumIrrepValuesDict = dict()
+
+    for featID in selectedFeatIDSet:
+        for puID in puIDSet:
+            featAmount = returnFeatAmountInPU(setupObject, featID, puID)
+            if featAmount > 0:
+                irrepValue = cluz_irrep.calcFeatUnitIrreplValue(setupObject, irrepInitVarDict, puID, featID, sumFeatAmountDict, sumSqrFeatAmount2Dict, targetShortfallDict)
+            else:
+                irrepValue = 0
+            try:
+                puIrrepValuesDict = irrepValuesDict[puID]
+            except KeyError:
+                puIrrepValuesDict = dict()
+            puIrrepValuesDict[featID] = irrepValue
+            irrepValuesDict[puID] = puIrrepValuesDict
+            try:
+                sumIrrepValue = sumIrrepValuesDict[puID]
+            except KeyError:
+                sumIrrepValue = 0
+            sumIrrepValue += irrepValue
+            sumIrrepValuesDict[puID] = sumIrrepValue
+
+    return irrepValuesDict, sumIrrepValuesDict
+
+
+def produceSumIrrepField(setupObject, irrepFieldName, sumIrrepValuesDict):
     puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
     provider = puLayer.dataProvider()
     idFieldOrder = provider.fieldNameIndex("Unit_ID")
@@ -794,14 +1006,6 @@ def produceIrrepField(setupObject, irrepFieldName, selectedTypeList, combSize, p
     puLayer.updateFields()
     irrepFieldOrder = provider.fieldNameIndex(irrepFieldName)
 
-    irrepInitVarDict = cluz_equations.makeIrrepInitVarDict(combSize, puSize)
-    totFeatDict, totSqrFeatDict = cluz_equations.makeIrrepTot_Tot2FeatDict(setupObject, selectedTypeList)
-
-    scoreDict = {}
-    for puID in setupObject.abundPUKeyDict:
-        irrepScore = cluz_equations.calcUnitIrreplScore(setupObject, puID, irrepInitVarDict, totFeatDict, totSqrFeatDict)
-        scoreDict[puID] = irrepScore
-
     puFeatures = puLayer.getFeatures()
     puLayer.startEditing()
     for puFeature in puFeatures:
@@ -809,12 +1013,36 @@ def produceIrrepField(setupObject, irrepFieldName, selectedTypeList, combSize, p
         puAttributes = puFeature.attributes()
         puID = puAttributes[idFieldOrder]
         try:
-            irrepValue = scoreDict[puID]
+            irrepValue = sumIrrepValuesDict[puID]
         except KeyError:
-            irrepValue = 0
+            irrepValue = -99
         puLayer.changeAttributeValue(puRow, irrepFieldOrder, irrepValue, True)
 
     puLayer.commitChanges()
+
+
+def makeIrrepValueMatrixTextFile(selectedFeatIDSet, irrepValuesDict, irrepValueMatrixTextFile):
+    with open(irrepValueMatrixTextFile, 'wb') as f:
+        irrepWriter = csv.writer(f)
+        featIDList = list(selectedFeatIDSet)
+        featIDList.sort()
+        headerList = copy.deepcopy(featIDList)
+        headerList.insert(0, "PU_ID")
+        irrepWriter.writerow(headerList)
+
+        puIDList = irrepValuesDict.keys()
+        puIDList.sort()
+        for puID in puIDList:
+            rowList = [str(puID)]
+            puIDIrrepValueDict = irrepValuesDict[puID]
+            for featID in featIDList:
+                try:
+                    irrepValue = puIDIrrepValueDict[featID]
+                except KeyError:
+                    irrepValue = 0
+                rowList.append(irrepValue)
+            irrepWriter.writerow(rowList)
+
 
 def makeParameterValueList(numAnalysesText, minAnalysesText, maxAnalysesText, exponentialBool):
     parameterValueList = []
@@ -1288,13 +1516,13 @@ def returnSelectedPUIDDict(setupObject):
     qgis.utils.iface.setActiveLayer(puLayer)
     puLayer = qgis.utils.iface.activeLayer()
     provider = puLayer.dataProvider()
-    idFieldOrder = provider.fieldNameIndex("Unit_ID")
-    statusFieldOrder = provider.fieldNameIndex("Status")
+    idFieldIndex = provider.fieldNameIndex("Unit_ID")
+    statusFieldIndex = provider.fieldNameIndex("Status")
 
     selectedPUs = puLayer.selectedFeatures()
     for aPU in selectedPUs:
-        puID = aPU.attributes()[idFieldOrder]
-        puStatus = str(aPU.attributes()[statusFieldOrder])
+        puID = aPU.attributes()[idFieldIndex]
+        puStatus = str(aPU.attributes()[statusFieldIndex])
         selectedPUIDDict[puID] = puStatus
 
     return selectedPUIDDict

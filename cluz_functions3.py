@@ -73,15 +73,15 @@ def changeStatusPuLayer(setupObject, changeStatusType, changeLockedPUsBool):
     return selectedPUIDStatusDict
 
 def calcChangeAbundDict(setupObject, selectedPUIDStatusDict, statusType):
-    statusBoolDict = {"Available": False, "Conserved": True, "Earmarked": True, "Excluded": "False"}
+    statusBoolDict = {"Available": False, "Conserved": True, "Earmarked": True, "Excluded": False}
     changeStatusBoolType = statusBoolDict[statusType]
 
-    changeAbundDict = {}
+    changeAbundDict = dict()
     for puID in selectedPUIDStatusDict:
         puStatus = selectedPUIDStatusDict[puID]
         currentStatusBoolType = statusBoolDict[puStatus]
 
-        if currentStatusBoolType == False and changeStatusBoolType == True:
+        if currentStatusBoolType is False and changeStatusBoolType:
             try:
                 puAbundDict = setupObject.abundPUKeyDict[puID]
                 for featID in puAbundDict:
@@ -95,7 +95,7 @@ def calcChangeAbundDict(setupObject, selectedPUIDStatusDict, statusType):
             except KeyError:
                 pass
 
-        if currentStatusBoolType == True and changeStatusBoolType == False:
+        if currentStatusBoolType and changeStatusBoolType is False:
             try:
                 puAbundDict = setupObject.abundPUKeyDict[puID]
                 for featID in puAbundDict:
@@ -110,6 +110,7 @@ def calcChangeAbundDict(setupObject, selectedPUIDStatusDict, statusType):
                 pass
 
     return changeAbundDict
+
 
 def updateTargetDictWithChanges(setupObject, changeAbundDict):
     targetDict = setupObject.targetDict
@@ -189,6 +190,39 @@ def changeStatus_makeSelectedPUIDStatusDict(puLayer, idFieldOrder, statusFieldOr
     puLayer.commitChanges()
 
     return selectedPUIDStatusDict
+
+
+def changeEarmarkedToAvailablePUs(setupObject):
+    puLayer = QgsVectorLayer(setupObject.puPath, "Planning units", "ogr")
+    puProvider = puLayer.dataProvider()
+    idFieldOrder = puProvider.fieldNameIndex("Unit_ID")
+    statusFieldOrder = puProvider.fieldNameIndex("Status")
+    changeBool = cluz_messages.checkChangeEarmarkedToAvailablePU()
+
+    if changeBool:
+        earmakedPUIDStatusDict = changeStatus_makeEarmakedPUIDStatusDict(puLayer, idFieldOrder, statusFieldOrder)
+        cluz_setup.updatePULayerToShowChangesByShiftingExtent()
+        changeAbundDict = calcChangeAbundDict(setupObject, earmakedPUIDStatusDict, "Available")
+        updateTargetDictWithChanges(setupObject, changeAbundDict)
+        cluz_setup.updateTargetCSVFromTargetDict(setupObject, setupObject.targetDict)
+        cluz_messages.changeEarmarkedToAvailablePU_Completed()
+        cluz_setup.removeThenAddPULayer(setupObject)
+
+
+def changeStatus_makeEarmakedPUIDStatusDict(puLayer, idFieldOrder, statusFieldOrder):
+    earmarkedPUIDStatusDict = dict()
+    puLayer.startEditing()
+    puFeatures = puLayer.getFeatures()
+    for puFeature in puFeatures:
+        puRow = puFeature.id()
+        puID = puFeature.attributes()[idFieldOrder]
+        puStatus = puFeature.attributes()[statusFieldOrder]
+        if puStatus == "Earmarked":
+            puLayer.changeAttributeValue(puRow, statusFieldOrder, "Available")
+            earmarkedPUIDStatusDict[puID] = puStatus
+    puLayer.commitChanges()
+
+    return earmarkedPUIDStatusDict
 
 
 def returnPointPUIDList(setupObject, point):
