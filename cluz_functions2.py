@@ -1521,7 +1521,7 @@ def returnSelectedPUIDDict(setupObject):
 
     selectedPUs = puLayer.selectedFeatures()
     for aPU in selectedPUs:
-        puID = aPU.attributes()[idFieldIndex]
+        puID = int(aPU.attributes()[idFieldIndex])
         puStatus = str(aPU.attributes()[statusFieldIndex])
         selectedPUIDDict[puID] = puStatus
 
@@ -1531,7 +1531,10 @@ def returnSelectedPUDetailsDict(setupObject, selectedPUIDDict):
     selectedPUDetailsDict = dict()
     for puID in selectedPUIDDict:
         puStatus = selectedPUIDDict[puID]
-        puAbundDict = setupObject.abundPUKeyDict[puID]
+        try:
+            puAbundDict = setupObject.abundPUKeyDict[puID]
+        except KeyError:
+            puAbundDict = dict()
         try:
             statusDetailsDict = selectedPUDetailsDict[puStatus]
         except KeyError:
@@ -1543,7 +1546,7 @@ def returnSelectedPUDetailsDict(setupObject, selectedPUIDDict):
             except KeyError:
                 featAmount = 0
             try:
-                featRunningAmount = statusDetailsDict[featID] + featAmount
+                featRunningAmount = statusDetailsDict[featID]
             except KeyError:
                 featRunningAmount = 0
             featRunningAmount += featAmount
