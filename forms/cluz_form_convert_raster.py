@@ -1,0 +1,115 @@
+# -*- coding: utf-8 -*-
+
+# Form implementation generated from reading ui file 'C:\Users\rjsmi\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\cluz\forms\cluz_form_convert_raster.ui'
+#
+# Created by: PyQt5 UI code generator 5.9.2
+#
+# WARNING! All changes made in this file will be lost!
+
+from PyQt5 import QtCore, QtGui, QtWidgets
+
+class Ui_convertRasterDialog(object):
+    def setupUi(self, convertRasterDialog):
+        convertRasterDialog.setObjectName("convertRasterDialog")
+        convertRasterDialog.setMinimumSize(QtCore.QSize(730, 380))
+        self.gridLayout = QtWidgets.QGridLayout(convertRasterDialog)
+        self.gridLayout.setObjectName("gridLayout")
+        self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_2.setObjectName("horizontalLayout_2")
+        self.logoLabel = QtWidgets.QLabel(convertRasterDialog)
+        self.logoLabel.setText("")
+        self.logoLabel.setPixmap(QtGui.QPixmap(":/logos/images/setup_logo_panel.png"))
+        self.logoLabel.setObjectName("logoLabel")
+        self.horizontalLayout_2.addWidget(self.logoLabel)
+        spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.horizontalLayout_2.addItem(spacerItem)
+        self.verticalLayout_2 = QtWidgets.QVBoxLayout()
+        self.verticalLayout_2.setObjectName("verticalLayout_2")
+        spacerItem1 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        self.verticalLayout_2.addItem(spacerItem1)
+        self.selectLabel = QtWidgets.QLabel(convertRasterDialog)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.selectLabel.sizePolicy().hasHeightForWidth())
+        self.selectLabel.setSizePolicy(sizePolicy)
+        self.selectLabel.setObjectName("selectLabel")
+        self.verticalLayout_2.addWidget(self.selectLabel)
+        self.selectListWidget = QtWidgets.QListWidget(convertRasterDialog)
+        self.selectListWidget.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
+        self.selectListWidget.setObjectName("selectListWidget")
+        self.verticalLayout_2.addWidget(self.selectListWidget)
+        self.verticalLayout = QtWidgets.QVBoxLayout()
+        self.verticalLayout.setObjectName("verticalLayout")
+        self.noneRadioButton = QtWidgets.QRadioButton(convertRasterDialog)
+        self.noneRadioButton.setMinimumSize(QtCore.QSize(431, 22))
+        self.noneRadioButton.setChecked(True)
+        self.noneRadioButton.setObjectName("noneRadioButton")
+        self.verticalLayout.addWidget(self.noneRadioButton)
+        self.userRadioButton = QtWidgets.QRadioButton(convertRasterDialog)
+        self.userRadioButton.setMinimumSize(QtCore.QSize(0, 22))
+        self.userRadioButton.setObjectName("userRadioButton")
+        self.verticalLayout.addWidget(self.userRadioButton)
+        self.verticalLayout_2.addLayout(self.verticalLayout)
+        self.horizontalLayout_3 = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_3.setObjectName("horizontalLayout_3")
+        self.convLabel = QtWidgets.QLabel(convertRasterDialog)
+        self.convLabel.setMinimumSize(QtCore.QSize(141, 22))
+        self.convLabel.setObjectName("convLabel")
+        self.horizontalLayout_3.addWidget(self.convLabel)
+        self.convLineEdit = QtWidgets.QLineEdit(convertRasterDialog)
+        self.convLineEdit.setObjectName("convLineEdit")
+        self.horizontalLayout_3.addWidget(self.convLineEdit)
+        self.verticalLayout_2.addLayout(self.horizontalLayout_3)
+        spacerItem2 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        self.verticalLayout_2.addItem(spacerItem2)
+        self.horizontalLayout = QtWidgets.QHBoxLayout()
+        self.horizontalLayout.setObjectName("horizontalLayout")
+        spacerItem3 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.horizontalLayout.addItem(spacerItem3)
+        self.okButton = QtWidgets.QPushButton(convertRasterDialog)
+        self.okButton.setObjectName("okButton")
+        self.horizontalLayout.addWidget(self.okButton)
+        spacerItem4 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.horizontalLayout.addItem(spacerItem4)
+        self.cancelButton = QtWidgets.QPushButton(convertRasterDialog)
+        self.cancelButton.setObjectName("cancelButton")
+        self.horizontalLayout.addWidget(self.cancelButton)
+        spacerItem5 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.horizontalLayout.addItem(spacerItem5)
+        self.horizontalLayout.setStretch(0, 2)
+        self.horizontalLayout.setStretch(1, 1)
+        self.horizontalLayout.setStretch(2, 2)
+        self.horizontalLayout.setStretch(3, 1)
+        self.horizontalLayout.setStretch(4, 2)
+        self.verticalLayout_2.addLayout(self.horizontalLayout)
+        self.horizontalLayout_2.addLayout(self.verticalLayout_2)
+        self.gridLayout.addLayout(self.horizontalLayout_2, 0, 0, 1, 1)
+
+        self.retranslateUi(convertRasterDialog)
+        self.cancelButton.clicked.connect(convertRasterDialog.close)
+        self.userRadioButton.toggled['bool'].connect(self.convLabel.setEnabled)
+        self.userRadioButton.toggled['bool'].connect(self.convLineEdit.setEnabled)
+        QtCore.QMetaObject.connectSlotsByName(convertRasterDialog)
+
+    def retranslateUi(self, convertRasterDialog):
+        _translate = QtCore.QCoreApplication.translate
+        convertRasterDialog.setWindowTitle(_translate("convertRasterDialog", "Convert raster layer to abundance data"))
+        self.selectLabel.setText(_translate("convertRasterDialog", "Select layers to import data into Marxan (must be single band rasters with integer values)"))
+        self.noneRadioButton.setText(_translate("convertRasterDialog", "No conversion (results will be in layer measurement units)"))
+        self.userRadioButton.setText(_translate("convertRasterDialog", "User defined conversion"))
+        self.convLabel.setText(_translate("convertRasterDialog", "         Area conversion value"))
+        self.okButton.setText(_translate("convertRasterDialog", "OK"))
+        self.cancelButton.setText(_translate("convertRasterDialog", "Cancel"))
+
+import resources_rc
+
+if __name__ == "__main__":
+    import sys
+    app = QtWidgets.QApplication(sys.argv)
+    convertRasterDialog = QtWidgets.QDialog()
+    ui = Ui_convertRasterDialog()
+    ui.setupUi(convertRasterDialog)
+    convertRasterDialog.show()
+    sys.exit(app.exec_())
+

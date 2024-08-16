@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="logos">
+    <file>images/setup_logo_panel.png</file>
+    <file>images/marxan_logo_panel.png</file>
+    <file>images/marxan_logo.png</file>
+  </qresource>
+</RCC>
